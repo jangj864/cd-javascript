@@ -1,0 +1,320 @@
+body.intro-page,
+body.intro-page * {
+    box-sizing: border-box;
+}
+
+body.intro-page {
+    --intro-action-row-height: clamp(70px, 6.5vw, 90px);
+
+    display: flex;
+    min-height: 100svh;
+    flex-direction: column;
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    text-align: left;
+}
+
+.intro-site-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: clamp(22px, 2.8vw, 42px);
+    row-gap: 8px;
+    align-items: start;
+    border-top: 2px solid var(--line);
+    padding: clamp(24px, 3vw, 42px) var(--page-padding) clamp(20px, 2.6vw, 34px);
+    color: var(--ink);
+    font-size: clamp(13px, 1.15vw, 18px);
+    font-weight: 700;
+    line-height: 1.08;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+.intro-site-header-main,
+.intro-site-header-meta {
+    display: grid;
+    gap: 8px;
+}
+
+.intro-site-header-main span,
+.intro-site-header-meta span {
+    min-width: 0;
+}
+
+.intro-site-header-main span:last-child {
+    color: var(--muted);
+}
+
+.intro-site-header-meta {
+    grid-template-columns: auto auto;
+    gap: clamp(22px, 2.8vw, 42px);
+    justify-self: end;
+    white-space: nowrap;
+}
+
+.intro-page-main {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.intro-page-inner {
+    display: flex;
+    width: 100%;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    text-align: center;
+}
+
+h1,
+h2,ㄴ
+h3,
+h4,
+p {
+    letter-spacing: 0;
+}
+
+h1,
+h2,
+h3,
+h4 {
+    margin: 0;
+}
+
+.intro-page-inner > h1:first-of-type {
+    display: flex;
+    min-height: clamp(132px, 15vw, 230px);
+    align-items: center;
+    justify-content: center;
+    padding: clamp(20px, 3vw, 42px) var(--page-padding);
+    color: var(--ink);
+    font-size: clamp(42px, 8vw, 118px);
+    font-weight: 500;
+    line-height: 0.94;
+    text-transform: uppercase;
+}
+
+h2 {
+    max-width: 920px;
+    margin: 0 auto;
+    color: var(--ink);
+    font-size: clamp(24px, 4vw, 52px);
+    font-weight: 400;
+    line-height: 1.08;
+    text-transform: uppercase;
+}
+
+.intro-page-inner > h2:first-of-type {
+    display: flex;
+    width: 100%;
+    max-width: none;
+    min-height: clamp(108px, 9vw, 138px);
+    align-items: center;
+    justify-content: center;
+    padding: clamp(24px, 2.6vw, 36px) var(--page-padding) clamp(30px, 3vw, 44px);
+}
+
+h3 {
+    margin: 10px 0;
+    padding: 6px 0;
+
+    color: var(--muted);
+    font-size: clamp(13px, 1vw, 15px);
+    font-weight: 700;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+br {
+    display: none;
+}
+
+hr {
+    height: 1px;
+    margin: 0;
+    border: 0;
+    background: var(--line-soft);
+}
+
+.introduction {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: clamp(12px, 2vw, 28px);
+    padding: clamp(16px, 2vw, 26px) var(--page-padding);
+}
+
+.introduction a {
+    display: flex;
+    width: min(100%, 240px);
+    min-height: clamp(42px, 4.4vw, 56px);
+    align-items: center;
+    justify-content: center;
+    justify-self: center;
+    border: 2px solid var(--line);
+    padding: 0 18px;
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+    font-size: clamp(13px, 1vw, 15px);
+    font-weight: 700;
+    line-height: 1;
+    text-decoration: none;
+    text-transform: uppercase;
+    transition:
+        background-color var(--ease-standard),
+        color var(--ease-standard),
+        border-color var(--ease-standard);
+}
+
+.introduction a:hover,
+.introduction a:focus-visible {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+    outline: none;
+}
+
+.intro-content {
+    display: flex;
+    width: 100%;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(20px, 2vw, 32px) 0;
+    overflow: visible;
+}
+
+.intro-content > * {
+    flex: 0 0 auto;
+}
+
+pre {
+    display: block;
+    max-width: calc(100vw - (var(--page-padding) * 2));
+    margin: 0 auto;
+    padding: 0 var(--page-padding);
+    color: var(--ink);
+    font-family: "Courier New", Courier, monospace;
+    font-size: clamp(9px, 1vw, 15px);
+    font-weight: 400;
+    line-height: 1.08;
+    text-align: left;
+    white-space: pre;
+}
+
+.intro-link-row {
+    display: flex;
+    flex-wrap: wrap;
+    min-height: var(--intro-action-row-height);
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 12px var(--page-padding);
+}
+
+.intro-link-row a,
+h1 a {
+    display: inline-flex;
+    min-height: 42px;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--line);
+    padding: 0 18px;
+    background: var(--paper);
+    color: var(--ink);
+    font-size: clamp(13px, 1vw, 15px);
+    font-weight: 700;
+    line-height: 1.2;
+    text-decoration: none;
+    text-transform: uppercase;
+    transition:
+        background-color var(--ease-standard),
+        color var(--ease-standard),
+        border-color var(--ease-standard);
+}
+
+.intro-link-row a:hover,
+.intro-link-row a:focus-visible,
+h1 a:hover,
+h1 a:focus-visible {
+    background: var(--ink);
+    color: var(--paper);
+    outline: none;
+}
+
+.introduction a:focus-visible,
+.intro-link-row a:focus-visible,
+h1 a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
+
+.intro-site-footer {
+    flex: 0 0 auto;
+}
+
+@media screen and (max-width: 900px) {
+    body.intro-page {
+        --intro-action-row-height: 74px;
+    }
+
+    .intro-site-header {
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: 16px;
+        row-gap: 7px;
+        padding: 16px 14px 14px;
+        font-size: clamp(12px, 3.4vw, 14px);
+        line-height: 1.16;
+    }
+
+    .intro-site-header-meta {
+        grid-template-columns: 1fr;
+        gap: 7px;
+        text-align: right;
+    }
+
+    .intro-page-inner > h1:first-of-type {
+        min-height: clamp(104px, 22vw, 156px);
+        padding: 24px 14px 18px;
+        font-size: clamp(36px, 12vw, 58px);
+    }
+
+    h2 {
+        font-size: clamp(22px, 7vw, 34px);
+    }
+
+    .introduction a {
+        width: 100%;
+        min-height: 42px;
+    }
+
+    .intro-content {
+        padding: 20px 0;
+    }
+
+    pre {
+        max-width: 100%;
+        padding: 0 14px;
+        font-size: clamp(6px, 1.9vw, 10px);
+        line-height: 1;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    body.intro-page {
+        --intro-action-row-height: 68px;
+    }
+
+    .intro-site-header {
+        column-gap: 12px;
+        padding: 14px;
+        font-size: clamp(11px, 3.2vw, 13px);
+    }
+}
