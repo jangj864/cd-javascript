@@ -47,6 +47,15 @@ body.intro-page {
     color: var(--muted);
 }
 
+.intro-site-header-main .studio-home-link {
+    color: var(--muted);
+}
+
+.intro-site-header-main .studio-home-link:hover,
+.intro-site-header-main .studio-home-link:focus-visible {
+    color: var(--accent);
+}
+
 .intro-site-header-meta {
     grid-template-columns: auto auto;
     gap: clamp(22px, 2.8vw, 42px);
