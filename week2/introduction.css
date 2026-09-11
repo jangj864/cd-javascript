@@ -229,7 +229,7 @@ hr {
 }
 
 body.quiz-page .intro-content {
-    gap: clamp(7px, 1vw, 12px);
+    gap: clamp(12px, 1.35vw, 18px);
 }
 
 .quiz-image {
@@ -267,7 +267,7 @@ body.quiz-page .intro-content {
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    gap: 10px;
+    gap: clamp(12px, 1.2vw, 16px);
 }
 
 .intro-answer-row {
