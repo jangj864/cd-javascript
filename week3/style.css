@@ -2,6 +2,7 @@
     --paper: #f3f0e8;
     --ink: #111111;
     --muted: #66615a;
+    --accent: #ff4a1c;
     --white-stripe: #f8f4ea;
     --road-mark: #1d5cff;
     --course-header-height: clamp(96px, 10svh, 128px);
@@ -49,8 +50,26 @@ body {
     line-height: 1;
 }
 
-.course-header-main span {
+.course-header-main span,
+.studio-home-link {
     color: var(--muted);
+}
+
+.studio-home-link {
+    width: fit-content;
+    text-decoration: none;
+    transition: color 180ms ease;
+}
+
+.studio-home-link:hover,
+.studio-home-link:focus-visible {
+    color: var(--accent);
+    outline: none;
+}
+
+.studio-home-link:focus-visible {
+    text-decoration: underline;
+    text-underline-offset: 4px;
 }
 
 .course-header-meta {
@@ -84,12 +103,14 @@ h1 {
 }
 
 .masthead p {
-    max-width: 16em;
+    min-width: max-content;
+    max-width: none;
     color: var(--muted);
     font-size: clamp(12px, 1vw, 14px);
     font-weight: 700;
     line-height: 1.15;
     text-align: right;
+    white-space: nowrap;
 }
 
 .pattern {
@@ -220,7 +241,10 @@ h1 {
     }
 
     .masthead p {
+        min-width: 0;
+        max-width: 16em;
         text-align: left;
+        white-space: normal;
     }
 
     .pattern {
