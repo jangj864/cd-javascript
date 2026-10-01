@@ -1,5 +1,6 @@
 const pattern = document.getElementById('pattern');
 const modeLabel = document.getElementById('modeLabel');
+const transformButton = document.getElementById('transform-pattern');
 
 // VARIABLES
 let isDisordered = false;
@@ -38,6 +39,8 @@ function generatePattern() {
         pattern.classList.remove('is-disordered');
         modeLabel.textContent = 'Click to disturb the system';
     }
+    transformButton.textContent = isDisordered ? 'Restore order ↗' : 'Disturb system ↗';
+    transformButton.setAttribute('aria-pressed', String(isDisordered));
 
     // LOOP
     for (let i = 0; i < coneTotal; i = i + 1) {
@@ -127,6 +130,7 @@ function transformPattern() {
 generatePattern();
 
 // INTERACTION
-document.addEventListener('click', transformPattern);
+pattern.addEventListener('click', transformPattern);
+transformButton.addEventListener('click', transformPattern);
 
 window.addEventListener('resize', generatePattern);

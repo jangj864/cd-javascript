@@ -3,29 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NYC Traffic Cone System</title>
+    <link rel="icon" href="../image/favicon.png" type="image/png">
+    <title>GENERATIVE PATTERN — Jinhyeok Jang</title>
+    <link rel="stylesheet" href="../site.css">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <header class="course-header">
-        <div class="course-header-main">
-            <strong>Parsons School of Design</strong>
-            <a class="studio-home-link" href="../index.html">CD Studio: JavaScript.A.Fa26</a>
-        </div>
-
-        <div class="course-header-meta">
-            <strong>Project Archive</strong>
-            <strong>Fall 2026</strong>
-        </div>
+    <header id="Title" aria-label="Project archive">
+        <hr class="thick-hr">
+        <h2>
+            <span class="up-sub-1">Parsons School of Design</span>
+            <span class="up-sub-2">Project Archive</span>
+            <span class="up-sub-3">Fall 2026</span>
+            <a class="up-sub-4 studio-home-link" href="../index.html">CD Studio: JavaScript.A.Fa26</a>
+        </h2>
+        <hr class="thick-hr">
     </header>
-
-    <section class="masthead">
-        <h1>NYC Traffic Cone System</h1>
-        <p id="modeLabel" aria-live="polite">Click to disturb the system</p>
-    </section>
-
-    <main id="pattern" class="pattern" aria-label="Generated traffic cone pattern"></main>
-
+    <main>
+        <section id="categories" class="pattern-heading" aria-labelledby="project-title">
+            <h1 id="project-title">GENERATIVE PATTERN</h1>
+            <span class="project-week">Week 03</span>
+        </section>
+        <div class="pattern-toolbar">
+            <p id="modeLabel" aria-live="polite">Click to disturb the system</p>
+            <button id="transform-pattern" type="button" aria-pressed="false">Disturb system ↗</button>
+        </div>
+        <div id="pattern" class="pattern" aria-label="Generated traffic cone pattern"></div>
+        <noscript><p class="script-notice">Enable JavaScript to view the traffic cone pattern.</p></noscript>
+        <nav class="project-navigation" aria-label="Project navigation">
+            <a href="../week2/index.html">← Previous project</a>
+            <a href="../index.html">All projects ↗</a>
+        </nav>
+    </main>
+    <hr class="thick-hr">
+    <footer class="archive-footer">
+        <span>Project Archive</span>
+        <span>New York / Seoul</span>
+    </footer>
+    <hr class="thick-hr">
     <script src="script.js"></script>
 </body>
 </html>

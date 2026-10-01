@@ -1,24 +1,41 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="shortcut icon" href="image/favicon.png" type="image/x-icon">
-    <title>Button Sites</title>
-    <link rel="stylesheet" type="text/css" href="site.css">
+    <link rel="icon" href="../image/favicon.png" type="image/png">
+    <link rel="stylesheet" href="../site.css">
+    <link rel="stylesheet" href="introduction.css">
+    <title>HELLO WORLD PT.2 — Background study</title>
 </head>
-
-<body>
-
-<button id="myButton">
-    Change Background
-</button>
-
-<script src="button.js">
-
-</script>
-
+<body class="intro-page">
+    <header id="Title" aria-label="Project archive">
+        <hr class="thick-hr">
+        <h2>
+            <span class="up-sub-1">Parsons School of Design</span>
+            <span class="up-sub-2">Project Archive</span>
+            <span class="up-sub-3">Fall 2026</span>
+            <a class="up-sub-4 studio-home-link" href="../index.html">CD Studio: JavaScript.A.Fa26</a>
+        </h2>
+        <hr class="thick-hr">
+    </header>
+    <main class="intro-page-main">
+        <section id="categories" class="pattern-heading" aria-labelledby="project-title">
+            <h1 id="project-title">HELLO WORLD PT.2</h1>
+            <span class="project-week">Week 02</span>
+        </section>
+        <div class="pattern-toolbar"><p>Background study</p></div>
+        <section class="intro-content">
+            <button id="myButton" class="project-button" type="button" aria-pressed="false">Change Background</button>
+        </section>
+        <nav class="project-navigation" aria-label="Project navigation">
+            <a href="index.html">← Introduction</a>
+            <a href="../index.html">All projects ↗</a>
+        </nav>
+    </main>
+    <hr class="thick-hr">
+    <footer class="archive-footer"><span>Project Archive</span><span>New York / Seoul</span></footer>
+    <hr class="thick-hr">
+    <script src="button.js"></script>
 </body>
-
 </html>

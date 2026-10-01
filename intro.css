@@ -1,0 +1,79 @@
+/* Shared content layout for the Hello World projects. */
+body.intro-page {
+    display: flex;
+    flex-direction: column;
+    min-height: 100svh;
+}
+.intro-page > hr { flex-shrink: 0; }
+.intro-page-main, .intro-page-inner {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+}
+.intro-content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    min-height: 420px;
+    padding: clamp(32px, 4vw, 56px) var(--page-padding);
+    text-align: center;
+}
+.intro-content > * { max-width: 100%; }
+.intro-content > br { display: none; }
+.intro-content pre {
+    margin: 0;
+    overflow-x: auto;
+    font-family: "Courier New", Courier, monospace;
+    font-size: clamp(5px, 1.3vw, 14px);
+    line-height: 1.1;
+    text-align: left;
+    white-space: pre;
+}
+.intro-content h3 {
+    margin: 0;
+    max-width: 780px;
+    color: var(--ink);
+    font-size: clamp(20px, 2.2vw, 30px);
+    font-weight: 600;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+.intro-content .intro-instruction {
+    max-width: 560px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.5;
+}
+.quiz-image {
+    display: block;
+    width: min(560px, 100%);
+    height: auto;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    background: var(--paper-soft);
+}
+.quiz-answer-row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+.quiz-answer {
+    min-height: 1.2em;
+    margin: 0;
+    color: var(--accent);
+    font-size: clamp(24px, 3vw, 42px);
+    font-weight: 700;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+.quiz-answer.is-false { color: #ff2a2a; }
+.intro-answer { font-size: clamp(16px, 2.2vw, 28px); }
+@media (max-width: 600px) {
+    .intro-content { min-height: 360px; gap: 20px; }
+}
