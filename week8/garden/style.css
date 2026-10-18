@@ -43,3 +43,6 @@ footer{padding-top:14px;padding-bottom:14px}
 .card #hint{height:3.4em;min-height:3.4em;max-height:3.4em;overflow:auto}
 .map{flex-shrink:0}
 @media(prefers-reduced-motion:reduce){.location-pin{animation:none}}
+/* Reveal the campus label only when interacting with the UC circle. */
+.uc b{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s ease}
+.uc:hover b,.uc:focus-visible b{opacity:1;visibility:visible}
