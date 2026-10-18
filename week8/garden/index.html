@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Excuse Garden — Why I'm Late</title>
+<link rel="stylesheet" href="style.css">
+<script src="excuses.js" defer></script><script src="script.js" defer></script>
+</head>
+<body>
+<header id="Title" class="archive-header" aria-label="Project archive">
+<hr class="thick-hr">
+<h2><span class="up-sub-1">Parsons School of Design</span><span class="up-sub-2">Project Archive</span><span class="up-sub-3">Fall 2026</span><a class="up-sub-4 studio-home-link" href="../../index.html">CD Studio: JavaScript.A.Fa26</a></h2>
+<hr class="thick-hr">
+</header>
+<header class="garden-header"><a class="brand" href="../../index.html">✳ EXCUSE GARDEN</a><span>PARSONS / NEW YORK CITY</span><span>WEEK 08 — INTERACTIVE GARDEN</span></header>
+<main>
+<section class="intro"><div class="eyebrow">A FIELD GUIDE TO BEING LATE</div><h1>Sorry,<br>I'm <em>on my way.</em></h1><p>The farther from school, the taller the tale.<br>Plant your excuse somewhere in New York.</p><div class="intro-bottom"><span class="little-flower">✳</span><span>ONE CITY. ONE SCHOOL.<br>100 REASONS TO BE LATE.</span></div></section>
+<section class="map-section" aria-label="New York map: click to plant an excuse">
+<div class="map-top"><span><i></i> LIVE FROM NEW YORK</span><button id="reset">Clear garden ↗</button></div>
+<div class="map" id="map"><img src="assets/nyc-map.svg" alt="Illustrated vector map of Manhattan and the surrounding New York area" draggable="false"><svg id="overlay" viewBox="0 0 550 450" aria-hidden="true"><g id="rings"></g><path id="route"/><g id="flowers"></g></svg><button class="uc" id="uc" aria-label="Parsons University Center, the center of the garden"><span>UC</span><b>PARSONS<br>63 FIFTH AVENUE</b></button><span class="water-label">HUDSON RIVER</span><span class="map-caption">CLICK ANYWHERE TO PLANT AN EXCUSE ↗</span></div>
+<div class="map-bottom"><span>◎ Straight-line distance from UC · approximate</span><span><b id="count">00</b> EXCUSES PLANTED</span></div>
+</section>
+<aside class="card" aria-live="polite"><div class="card-label">YOUR LATEST EXCUSE <span id="number">001 / 100</span></div><div class="distance"><span id="distance">1.0</span><small>km<br>FROM UC</small></div><span class="tag" id="category">SO CLOSE, YET SO LATE</span><div class="quote-mark">“</div><h2 id="excuse">The elevator broke, so I had to take the stairs.</h2><p id="hint">Click the map to find an excuse for that distance.</p><button class="another" id="another">Same distance, new excuse <span>↗</span></button><div class="presets"><span>TRY A DISTANCE</span><div><button data-km="1">1 km</button><button data-km="3">3 km</button><button data-km="5">5 km</button><button data-km="10">10 km</button></div></div><div class="ticket-end">EXCUSE NO. <b id="ticket">001</b><span>✳</span></div></aside>
+</main>
+<footer><span>✳ A LITTLE DISTANCE. A LOT OF EXCUSES.</span><span>100 excuses / 10 distance bands / a garden grown by clicks</span><a href="https://makingcenter.parsons.edu/university-center-63-fifth-ave-filter-pg/" target="_blank" rel="noreferrer">UC · 63 Fifth Ave ↗</a></footer>
+</body></html>
