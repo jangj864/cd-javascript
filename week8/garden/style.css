@@ -12,3 +12,27 @@
 #Title .up-sub-2{grid-column:2}#Title .up-sub-3{grid-column:3}
 #Title .studio-home-link:hover,#Title .studio-home-link:focus-visible{color:#185cff}
 @media(max-width:900px){#Title h2{grid-template-columns:minmax(0,1fr) auto;column-gap:16px;row-gap:7px;padding:16px 14px 14px;font-size:clamp(12px,3.4vw,14px);line-height:1.16}#Title h2 .up-sub-1{grid-column:1;grid-row:1}#Title h2 .up-sub-2{grid-column:1;grid-row:2;justify-self:start}#Title h2 .up-sub-3{grid-column:2;grid-row:1}#Title h2 .up-sub-4{grid-column:1/-1;grid-row:3}}
+
+/* Keep the garden compact beneath the archive masthead. */
+.garden-header{padding:12px 0}
+main{padding-top:22px;padding-bottom:22px}
+.intro{padding-top:10px;padding-bottom:10px}
+.intro h1{margin-top:24px;margin-bottom:20px}
+footer{padding-top:14px;padding-bottom:14px}
+@media(min-width:1450px){main{padding-top:26px}.card{min-height:530px}}
+@media(min-width:1051px) and (max-height:850px){
+  main{padding-top:16px;padding-bottom:16px;gap:22px}
+  .card{min-height:0;padding:16px 18px}
+  .card-label{padding-bottom:12px}
+  .distance{padding-top:14px;padding-bottom:10px}
+  .distance>span{font-size:72px}
+  .quote-mark{margin-top:8px;height:36px;font-size:48px}
+  .card h2{font-size:19px;margin-bottom:10px}
+  #hint{margin-bottom:16px}
+  .another{padding:11px 12px}
+  .presets{padding-top:15px}
+  .ticket-end{margin-top:15px;padding-top:12px}
+  .intro-bottom{padding-top:24px}
+}
+@media(max-width:1050px){.intro h1{margin-top:16px;margin-bottom:16px}}
+@media(max-width:680px){.garden-header{padding:10px 0}main{padding-top:20px;padding-bottom:20px}}
