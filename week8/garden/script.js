@@ -8,7 +8,17 @@ const ns = 'http://www.w3.org/2000/svg';
 let selected = { x: UC.x + UNITS_PER_KM, y: UC.y };
 let currentKm = 1;
 let planted = 0;
-const previousByBand = new Map();
+const allExcuses = excuseBands.flatMap((band, bandIndex) =>
+  band.items.map((text, itemIndex) => ({ text, label: band.label, bandIndex, number: bandIndex * 10 + itemIndex + 1 }))
+);
+let previousExcuse = 0; // The initial card displays excuse 001.
+function randomExcuse() {
+  // Uniformly choose from every excuse except the one currently displayed.
+  let index = Math.floor(Math.random() * (allExcuses.length - 1));
+  if (index >= previousExcuse) index++;
+  previousExcuse = index;
+  return allExcuses[index];
+}
 function svgNode(name, attributes) {
   const node = document.createElementNS(ns, name);
   Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, value));
@@ -20,19 +30,15 @@ function svgNode(name, attributes) {
 function plant(point, exactKm) {
   selected = point;
   currentKm = exactKm ?? Math.hypot(point.x - UC.x, point.y - UC.y) / UNITS_PER_KM;
-  // Nearest whole-km band: 1 km = elevator; 3 km = bus; 10+ = long journey.
-  const bandIndex = Math.min(9, Math.max(0, Math.round(currentKm) - 1));
-  const band = excuseBands[bandIndex];
-  let itemIndex = Math.floor(Math.random() * band.items.length);
-  if (itemIndex === previousByBand.get(bandIndex)) itemIndex = (itemIndex + 1) % band.items.length;
-  previousByBand.set(bandIndex, itemIndex);
-  const number = String(bandIndex * 10 + itemIndex + 1).padStart(3, '0');
+  const excuse = randomExcuse();
+  const bandIndex = excuse.bandIndex;
+  const number = String(excuse.number).padStart(3, '0');
   document.getElementById('distance').textContent = currentKm.toFixed(1);
-  document.getElementById('category').textContent = band.label;
-  document.getElementById('excuse').textContent = band.items[itemIndex];
+  document.getElementById('category').textContent = excuse.label;
+  document.getElementById('excuse').textContent = excuse.text;
   document.getElementById('number').textContent = `${number} / 100`;
   document.getElementById('ticket').textContent = number;
-  document.getElementById('hint').textContent = currentKm < .1 ? 'You made it to school. Just a little farther to class!' : `About ${currentKm.toFixed(1)} km from UC. More distance, more excuses.`;
+  document.getElementById('hint').textContent = currentKm < .1 ? 'You made it to school. Just a little farther to class!' : `About ${currentKm.toFixed(1)} km from UC. A random excuse, wherever you are.`;
   document.getElementById('route').setAttribute('d', `M ${UC.x} ${UC.y} L ${point.x} ${point.y}`);
   const pin = svgNode('g', { transform: `translate(${point.x} ${point.y})` });
   const marker = svgNode('g', { class: 'location-pin' });
@@ -47,7 +53,7 @@ function plant(point, exactKm) {
   marker.append(svgNode('circle', { cx: 0, cy: -15, r: 2.8, fill: '#293c32' }));
   pin.append(marker);
   const title = svgNode('title', {});
-  title.textContent = `${currentKm.toFixed(1)} km — ${band.items[itemIndex]}`;
+  title.textContent = `${currentKm.toFixed(1)} km — ${excuse.text}`;
   pin.append(title);
   const flowers = document.getElementById('flowers');
   flowers.append(pin);
