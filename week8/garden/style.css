@@ -46,3 +46,7 @@ footer{padding-top:14px;padding-bottom:14px}
 /* Reveal the campus label only when interacting with the UC circle. */
 .uc b{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s ease}
 .uc:hover b,.uc:focus-visible b{opacity:1;visibility:visible}
+/* Let the map panel follow its own content instead of the taller card. */
+main > .map-section{align-self:start}
+.map-section .map{margin:0}
+.map-section .map-bottom{margin-top:0}
