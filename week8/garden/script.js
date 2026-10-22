@@ -8,6 +8,7 @@ const ns = 'http://www.w3.org/2000/svg';
 let selected = { x: UC.x + UNITS_PER_KM, y: UC.y };
 let currentKm = 1;
 let planted = 0;
+const pinLocations = [];
 const allExcuses = excuseBands.flatMap((band, bandIndex) =>
   band.items.map((text, itemIndex) => ({ text, label: band.label, bandIndex, number: bandIndex * 10 + itemIndex + 1 }))
 );
@@ -27,6 +28,23 @@ function svgNode(name, attributes) {
 [1, 3, 5, 10].forEach(km => {
   document.getElementById('rings').append(svgNode('circle', { cx: UC.x, cy: UC.y, r: km * UNITS_PER_KM }));
 });
+function randomPointAtDistance(km) {
+  const radius = km * UNITS_PER_KM;
+  const offset = Math.random() * Math.PI * 2;
+  const candidates = [];
+  for (let i = 0; i < 720; i++) {
+    const angle = offset + i * Math.PI * 2 / 720;
+    const point = { x: UC.x + Math.cos(angle) * radius, y: UC.y + Math.sin(angle) * radius };
+    // Leave room for the full pin above its tip and along both sides.
+    if (point.x < 9 || point.x > 541 || point.y < 24 || point.y > 449) continue;
+    const clearance = Math.min(...pinLocations.map(other => Math.hypot(point.x - other.x, point.y - other.y)));
+    candidates.push({ point, clearance });
+  }
+  const free = candidates.filter(candidate => candidate.clearance >= 18);
+  // Once a ring fills up, use its most open spot instead of stacking pins.
+  if (free.length) return free[Math.floor(Math.random() * free.length)].point;
+  return candidates.reduce((best, candidate) => candidate.clearance > best.clearance ? candidate : best).point;
+}
 function plant(point, exactKm) {
   selected = point;
   currentKm = exactKm ?? Math.hypot(point.x - UC.x, point.y - UC.y) / UNITS_PER_KM;
@@ -57,8 +75,12 @@ function plant(point, exactKm) {
   pin.append(title);
   const flowers = document.getElementById('flowers');
   flowers.append(pin);
+  pinLocations.push({ ...point });
   // Bound SVG growth on long sessions while keeping the total planted count.
-  if (flowers.children.length > 200) flowers.firstElementChild.remove();
+  if (flowers.children.length > 200) {
+    flowers.firstElementChild.remove();
+    pinLocations.shift();
+  }
   planted++;
   document.getElementById('count').textContent = String(planted).padStart(2, '0');
 }
@@ -71,11 +93,11 @@ document.getElementById('uc').addEventListener('click', () => plant({ ...UC }, 0
 document.getElementById('another').addEventListener('click', () => plant(selected, currentKm));
 document.querySelectorAll('[data-km]').forEach(button => button.addEventListener('click', () => {
   const km = Number(button.dataset.km);
-  // A north-east bearing keeps every preset, including 10 km, on the map.
-  plant({ x: UC.x + km * UNITS_PER_KM * .35, y: UC.y - km * UNITS_PER_KM * Math.sqrt(1 - .35 ** 2) }, km);
+  plant(randomPointAtDistance(km), km);
 }));
 document.getElementById('reset').addEventListener('click', () => {
   document.getElementById('flowers').replaceChildren();
+  pinLocations.length = 0;
   document.getElementById('route').setAttribute('d', '');
   planted = 0;
   document.getElementById('count').textContent = '00';
