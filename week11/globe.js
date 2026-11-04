@@ -131,6 +131,7 @@ export function createGlobe(container, onSelect, onRotationChange) {
   let lastTime = 0;
   let animation;
   let zoomTarget = camera.position.z;
+  let baseDistance = camera.position.z;
   const axisY = new THREE.Vector3(0, 1, 0);
   const axisX = new THREE.Vector3(1, 0, 0);
   const rotation = new THREE.Quaternion();
@@ -196,18 +197,12 @@ export function createGlobe(container, onSelect, onRotationChange) {
     if (!width || !height) return;
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
-    // Fit the entire Earth on narrow displays, leaving room above for the title.
-    camera.fov = width < 760 ? 50 : 42;
-    if (width < 760) {
-      const fitDistance = RADIUS / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.min(camera.aspect, 1) * 1.12;
-      camera.position.z = Math.max(6.9, fitDistance);
-      zoomTarget = camera.position.z;
-      camera.setViewOffset(width, height, 0, -height * 0.105, width, height);
-    } else {
-      camera.clearViewOffset();
-      camera.position.z = 6.9;
-      zoomTarget = 6.9;
-    }
+    // Fit the globe within its own stage, with a clear margin on every side.
+    camera.fov = 42;
+    camera.clearViewOffset();
+    baseDistance = RADIUS / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.min(camera.aspect, 1) * 1.1;
+    camera.position.z = baseDistance;
+    zoomTarget = baseDistance;
     camera.updateProjectionMatrix();
   }
   const resizeObserver = new ResizeObserver(resize);
@@ -306,6 +301,6 @@ export function createGlobe(container, onSelect, onRotationChange) {
   animation = requestAnimationFrame(frame);
   return {
     setEvents, setWeather, select, zoom, setRotation,
-    reset() { target.identity(); focused = true; zoomTarget = container.clientWidth < 760 ? RADIUS / Math.sin(THREE.MathUtils.degToRad(25)) / Math.min(camera.aspect, 1) * 1.12 : 6.9; setRotation(!reducedMotion); },
+    reset() { target.identity(); focused = true; zoomTarget = baseDistance; setRotation(!reducedMotion); },
   };
 }
