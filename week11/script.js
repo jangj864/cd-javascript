@@ -1,3 +1,4 @@
+import { OZONE_SNAPSHOT, ozoneURLs, mergeOzone } from './ozone.js';
 import { SITES, weatherURL, parseWeather } from './weather.js';
 
 const FEED_URL = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson';
@@ -5,6 +6,7 @@ const $ = id => document.getElementById(id);
 const WEATHER_INTERVAL = 15 * 60 * 1000;
 const makeFeed = () => ({ items: [], selected: null, updated: null, loading: false, error: '', previous: new Map() });
 const state = { layer: 'temperature', paused: false, weather: makeFeed(), seismic: makeFeed(), filters: { temperature: -30, precipitation: 0, seismic: 0 } };
+const ozone = { data: OZONE_SNAPSHOT, snapshot: true, loading: false, checked: null, error: '' };
 let globe = null;
 let rotating = !matchMedia('(prefers-reduced-motion: reduce)').matches;
 const currentFeed = () => state.layer === 'seismic' ? state.seismic : state.weather;
@@ -22,6 +24,7 @@ function visibleItems() {
   .sort((a, b) => weatherValue(b) - weatherValue(a));
 }
 function updateStatus() {
+ if (state.layer === 'ozone') { updateOzoneStatus();return; }
  const feed = currentFeed();
  $('connection').textContent = feed.loading ? 'SYNCHRONIZING' : feed.error ? 'DATA DELAYED' : state.paused ? 'UPDATES PAUSED' : feed.updated ? 'RECEIVING LIVE DATA' : 'AWAITING DATA';
  $('refresh').disabled = feed.loading;
@@ -35,6 +38,7 @@ function updateStatus() {
  }
 }
 function selectItem(id, focus = false) {
+ if (state.layer === 'ozone') { if (focus) openWidget('details');return; }
  const feed = currentFeed();
  const item = feed.items.find(entry => entry.id === id);
  if (!item) return;
@@ -126,6 +130,7 @@ function clearSelection() {
  $('data-change').textContent = '';
 }
 function render() {
+ if (state.layer === 'ozone') { renderOzone();return; }
  const feed = currentFeed(); const items = visibleItems(); const seismic = state.layer === 'seismic';
  const fragment = document.createDocumentFragment();
  for (const item of items) {
@@ -176,7 +181,7 @@ async function loadWeather(force = false) {
   feed.error = feed.updated ? `Weather connection interrupted. Retaining data fetched ${utcTime(feed.updated)} UTC.` : 'Weather unavailable. Select Refresh to retry; seismic data is separate.';
  } finally {
   clearTimeout(timeout);feed.loading = false;
-  if (state.layer !== 'seismic') render();
+  if (['temperature', 'precipitation'].includes(state.layer)) render();
  }
 }
 async function loadSeismic(force = false) {
@@ -197,11 +202,73 @@ async function loadSeismic(force = false) {
  } catch { feed.error = feed.updated ? `USGS connection interrupted. Retaining records fetched ${utcTime(feed.updated)} UTC.` : 'USGS unavailable. Select Refresh to retry; weather data is separate.'; }
  finally { clearTimeout(timeout);feed.loading = false;if (state.layer === 'seismic') render(); }
 }
-const loadActive = force => state.layer === 'seismic' ? loadSeismic(force) : loadWeather(force);
+function updateOzoneStatus() {
+ $('connection').textContent = ozone.loading ? 'CHECKING NASA DATA' : ozone.snapshot ? 'OZONE / SAVED DATA' : 'OZONE / DAILY DATA';
+ $('refresh').disabled = ozone.loading;
+ $('synced').textContent = `OBSERVED ${ozone.data.date}`;
+ $('sync-cycle').textContent = '/ DAILY SOURCE · 1H CHECK';
+ $('ozone-status').textContent = ozone.loading ? `Checking NASA. Showing dated ${ozone.snapshot ? 'saved ' : ''}observations in the meantime.` : ozone.error || (ozone.snapshot ? `Saved NASA observations, checked ${OZONE_SNAPSHOT.checkedAt}. Not a live ozone map.` : `NASA daily statistics${state.paused ? ' · Automatic checks paused' : ''}. Not a live ozone map.`);
+}
+function renderOzone() {
+ const data = ozone.data;
+ $('total').textContent = `${data.area.toFixed(2)}`;
+ $('stat-one-label').textContent = 'OZONE HOLE / MILLION KM²';
+ $('strongest').textContent = `${data.minimum} DU`;
+ $('stat-two-label').textContent = 'SOUTHERN MINIMUM';
+ $('ozone-area').textContent = data.area.toFixed(2);
+ $('ozone-minimum').textContent = String(data.minimum);
+ $('ozone-date').textContent = `OBSERVED / ${data.date} · NASA TOMS + OMI + OMPS`;
+ const points = data.history;
+ const svg = $('ozone-chart');svg.replaceChildren();
+ if (points.length > 1) {
+  const maximum = Math.max(1, ...points.map(point => point.area));
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+  line.setAttribute('points', points.map((point, index) => `${8 + index / (points.length - 1) * 284},${72 - point.area / maximum * 60}`).join(' '));
+  line.setAttribute('fill', 'none');line.setAttribute('stroke', '#ee9cdb');line.setAttribute('stroke-width', '2');svg.append(line);
+  svg.setAttribute('aria-label', points.map(point => `${point.date}: ${point.area} million square kilometers`).join(', '));
+  $('ozone-chart-range').textContent = `${points[0].date} — ${points.at(-1).date} · 0–${maximum.toFixed(1)} MILLION KM²`;
+ }
+ globe?.setOzone(data);updateOzoneStatus();
+}
+async function loadOzone(force = false) {
+ if (ozone.loading || (!force && ozone.checked && Date.now() - ozone.checked < 3600000)) return;
+ ozone.loading = true;ozone.checked = Date.now();updateStatus();
+ const controller = new AbortController();const timeout = setTimeout(() => controller.abort(), 12000);
+ try {
+  const texts = await Promise.all(ozoneURLs().map(async url => {
+   const response = await fetch(url, {signal: controller.signal});
+   if (!response.ok) throw new Error('NASA source unavailable');
+   return response.text();
+  }));
+  const next = mergeOzone(...texts);
+  if (next.date < ozone.data.date) throw new Error('NASA response predates retained observations');
+  ozone.data = next;ozone.snapshot = false;ozone.error = '';
+ } catch {
+  ozone.error = `NASA direct refresh unavailable. Retaining ${ozone.snapshot ? 'saved ' : ''}observations dated ${ozone.data.date}; this is not current real-time data.`;
+ } finally {
+  clearTimeout(timeout);ozone.loading = false;if (state.layer === 'ozone') renderOzone();
+ }
+}
+$('ozone-focus').addEventListener('click', () => globe?.focusAntarctica());
+const loadActive = force => state.layer === 'ozone' ? loadOzone(force) : state.layer === 'seismic' ? loadSeismic(force) : loadWeather(force);
 function changeLayer(layer) {
  state.layer = layer;
  document.querySelectorAll('button[data-layer]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.layer === layer)));
  document.body.dataset.layer = layer;
+ $('ozone-focus').hidden = layer !== 'ozone';
+ $('ozone-settings-note').hidden = layer !== 'ozone';
+ document.querySelector('.filter').hidden = layer === 'ozone';
+ $('data-launch-label').textContent = layer === 'ozone' ? 'OZONE REPORT' : 'LOCATIONS';
+ setDataView(document.querySelector('[data-view][aria-pressed=true]')?.dataset.view || 'locations');
+ if (layer === 'ozone') {
+  $('layer-caption').textContent = 'ANTARCTIC OZONE / NASA DAILY';
+  $('sampling-note').textContent = 'EQUIVALENT-AREA CAP · SHELL HEIGHT EXAGGERATED · NOT A SATELLITE MAP';
+  $('legend').replaceChildren();
+  for (const [color, text] of [['#72c7ff', 'OZONE SHELL'], ['#f093d7', 'DEPLETED CAP / < 220 DU']]) {
+   const label = document.createElement('span');const dot = document.createElement('i');dot.style.background = color;label.append(dot, document.createTextNode(text));$('legend').append(label);
+  }
+  renderOzone();loadOzone(false);return;
+ }
  const ranges = { temperature: [-30, 45, 1], precipitation: [0, 10, 0.1], seismic: [0, 5, 0.5] };
  const [min, max, step] = ranges[layer];
  $('magnitude').min = min;$('magnitude').max = max;$('magnitude').step = step;$('magnitude').value = state.filters[layer];
@@ -236,15 +303,19 @@ $('reset').addEventListener('click', () => globe?.reset());
 // Native dialogs provide keyboard focus containment, Escape and focus restoration.
 function setDataView(view) {
  $('readings').scrollTop = 0;
- document.querySelector('.event-panel').hidden = view !== 'locations';
- document.querySelector('.event-detail').hidden = view !== 'details';
+ const isOzone = state.layer === 'ozone';
+ $('ozone-panel').hidden = !isOzone;
+ document.querySelector('.widget-tabs').hidden = isOzone;
+ $('readings-title').textContent = isOzone ? 'OZONE LAYER / ANTARCTIC REPORT' : 'LIVE DATA';
+ document.querySelector('.event-panel').hidden = isOzone || view !== 'locations';
+ document.querySelector('.event-detail').hidden = isOzone || view !== 'details';
  document.querySelectorAll('[data-view]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.view === view)));
  document.querySelectorAll('[data-widget]').forEach(button => button.setAttribute('aria-expanded', String($('readings').open && button.dataset.widget === view)));
 }
 function openWidget(name) {
  const id = ['locations', 'details'].includes(name) ? 'readings' : name;
  const dialog = $(id);
- if (dialog.open && ['locations', 'details'].includes(name)) { setDataView(name);document.querySelector(`[data-view="${name}"]`).focus();return; }
+ if (dialog.open && ['locations', 'details'].includes(name)) { setDataView(name);(state.layer === 'ozone' ? document.querySelector('[data-close=readings]') : document.querySelector(`[data-view="${name}"]`)).focus();return; }
  document.querySelectorAll('.widget-dialog[open]').forEach(open => open.close());
  if (['locations', 'details'].includes(name)) setDataView(name);
  dialog.showModal();

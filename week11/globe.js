@@ -58,6 +58,20 @@ export function createGlobe(container, onSelect, onRotationChange) {
   }));
   earth.add(atmosphere);
 
+  // An explanatory, vertically exaggerated ozone shell, not a measured ozone map.
+  const ozoneGroup = new THREE.Group();
+  ozoneGroup.visible = false;earth.add(ozoneGroup);
+  const ozoneUniforms = { capCos: {value: 0.94}, hasHole: {value: 1} };
+  const ozoneShell = new THREE.Mesh(new THREE.SphereGeometry(RADIUS * 1.055, 96, 64), new THREE.ShaderMaterial({
+    uniforms: ozoneUniforms,
+    vertexShader: 'varying vec3 vLocal; varying vec3 vNormal; varying vec3 vView; void main(){vLocal=normalize(position);vec4 p=modelViewMatrix*vec4(position,1.0);vNormal=normalize(normalMatrix*normal);vView=normalize(-p.xyz);gl_Position=projectionMatrix*p;}',
+    fragmentShader: 'uniform float capCos; uniform float hasHole; varying vec3 vLocal; varying vec3 vNormal; varying vec3 vView; void main(){float polar=-normalize(vLocal).y;float cap=smoothstep(capCos-0.008,capCos+0.008,polar)*hasHole;float rim=pow(1.0-abs(dot(normalize(vNormal),normalize(vView))),2.0);float edge=(1.0-smoothstep(0.0,0.013,abs(polar-capCos)))*hasHole;vec3 col=mix(vec3(0.28,0.71,1.0),vec3(0.87,0.27,0.69),cap);float alpha=mix(0.13+rim*0.42,0.08+rim*0.20,cap)+edge*0.6;gl_FragColor=vec4(col,alpha);}',
+    transparent: true, depthWrite: false,
+  }));
+  ozoneGroup.add(ozoneShell);
+  const ozoneBoundary = new THREE.LineLoop(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({color: 0xffa3e4, transparent: true, opacity: 0.9}));
+  ozoneGroup.add(ozoneBoundary);
+
   // Subtle latitude / longitude lines sit on the geographic sphere.
   const gridMaterial = new THREE.LineBasicMaterial({ color: 0x81b6dd, transparent: true, opacity: 0.075 });
   for (let latitude = -60; latitude <= 60; latitude += 30) {
@@ -94,8 +108,8 @@ export function createGlobe(container, onSelect, onRotationChange) {
   let weatherOpacity = 0;
   function paintWeather(items, layer) {
     weatherContext.clearRect(0, 0, 1024, 512);
-    weatherShell.visible = layer !== 'seismic';
-    if (layer === 'seismic') return;
+    weatherShell.visible = !['seismic', 'ozone'].includes(layer);
+    if (!weatherShell.visible) return;
     for (const item of items) {
       if (layer === 'precipitation' && item.precipitation <= 0) continue;
       const color = layer === 'temperature' ? heatColor(item.temperature) : new THREE.Color(0x3bbdff);
@@ -143,6 +157,7 @@ export function createGlobe(container, onSelect, onRotationChange) {
   }
   function setData(items, layer) {
     mode = layer;
+    ozoneGroup.visible = false;
     paintWeather(items, layer);
     for (const entry of entries) {
       entry.dot.material.dispose();entry.ring.material.dispose();entry.halo.material.dispose();
@@ -181,6 +196,26 @@ export function createGlobe(container, onSelect, onRotationChange) {
     setData(events.map(event => ({ id: event.id, longitude: event.geometry.coordinates[0], latitude: event.geometry.coordinates[1], mag: event.properties.mag })), 'seismic');
   }
   function setWeather(samples, layer) { setData(samples, layer); }
+  function focusAntarctica() {
+    target.setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
+    focused = true;setRotation(false);
+  }
+  function setOzone(data) {
+    const entering = mode !== 'ozone';
+    setData([], 'ozone');
+    ozoneGroup.visible = true;
+    // Spherical-cap area A = 2πR²(1 − cos θ), using Earth's mean radius.
+    const cosine = THREE.MathUtils.clamp(1 - data.area * 1e6 / (2 * Math.PI * 6371 * 6371), -1, 1);
+    ozoneUniforms.capCos.value = cosine;
+    ozoneUniforms.hasHole.value = data.area > 0 ? 1 : 0;
+    ozoneBoundary.visible = data.area > 0;
+    const latitude = -90 + THREE.MathUtils.radToDeg(Math.acos(cosine));
+    const positions = [];
+    for (let longitude = -180; longitude < 180; longitude += 2) positions.push(latLonVector(longitude, latitude, RADIUS * 1.057));
+    ozoneBoundary.geometry.dispose();
+    ozoneBoundary.geometry = new THREE.BufferGeometry().setFromPoints(positions);
+    if (entering) focusAntarctica();
+  }
   function select(id, focus) {
     selected = id;
     if (focus) {
@@ -250,7 +285,11 @@ export function createGlobe(container, onSelect, onRotationChange) {
       const delta = Math.hypot(x - (event.clientX - rect.left), y - (event.clientY - rect.top));
       if (delta < distance) { distance = delta; nearest = entry; }
     }
-    if (nearest) onSelect(nearest.id);
+    if (mode === 'ozone') {
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1), camera);
+      if (ray.intersectObject(surface).length) onSelect('ozone');
+    } else if (nearest) onSelect(nearest.id);
   });
   function cancelDrag() { drag = null; }
   renderer.domElement.addEventListener('pointercancel', cancelDrag);
@@ -300,7 +339,7 @@ export function createGlobe(container, onSelect, onRotationChange) {
   onRotationChange(autoRotate);
   animation = requestAnimationFrame(frame);
   return {
-    setEvents, setWeather, select, zoom, setRotation,
-    reset() { target.identity(); focused = true; zoomTarget = baseDistance; setRotation(!reducedMotion); },
+    setEvents, setWeather, setOzone, focusAntarctica, select, zoom, setRotation,
+    reset() { if (mode === 'ozone') { focusAntarctica();zoomTarget = baseDistance;return; } target.identity(); focused = true; zoomTarget = baseDistance; setRotation(!reducedMotion); },
   };
 }
