@@ -76,6 +76,7 @@ function selectItem(id, focus = false) {
  if (url) $('event-link').href = url;
  else $('event-link').removeAttribute('href');
  $('event-link').textContent = seismic ? 'EXPLORE USGS RECORD ↗' : 'OPEN-METEO / DATA SOURCE ↗';
+ if (focus) openWidget('details');
 }
 function renderHistory(item) {
  const chart = $('history-chart');
@@ -199,7 +200,7 @@ async function loadSeismic(force = false) {
 const loadActive = force => state.layer === 'seismic' ? loadSeismic(force) : loadWeather(force);
 function changeLayer(layer) {
  state.layer = layer;
- document.querySelectorAll('[data-layer]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.layer === layer)));
+ document.querySelectorAll('button[data-layer]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.layer === layer)));
  document.body.dataset.layer = layer;
  const ranges = { temperature: [-30, 45, 1], precipitation: [0, 10, 0.1], seismic: [0, 5, 0.5] };
  const [min, max, step] = ranges[layer];
@@ -222,7 +223,7 @@ function updateThreshold() {
  $('threshold').textContent = value === (state.layer === 'temperature' ? -30 : 0) ? 'ALL' : `${value.toFixed(state.layer === 'temperature' ? 0 : 1)}${state.layer === 'temperature' ? '°C' : state.layer === 'precipitation' ? ' MM' : ' M'}+`;
 }
 $('magnitude').addEventListener('input', event => {state.filters[state.layer] = Number(event.target.value);updateThreshold();render();});
-document.querySelectorAll('[data-layer]').forEach(button => button.addEventListener('click', () => changeLayer(button.dataset.layer)));
+document.querySelectorAll('button[data-layer]').forEach(button => button.addEventListener('click', () => changeLayer(button.dataset.layer)));
 $('refresh').addEventListener('click', () => loadActive(true));
 $('pause').addEventListener('click', () => {state.paused = !state.paused;$('pause').textContent = state.paused ? 'RESUME FEED' : 'PAUSE FEED';$('pause').setAttribute('aria-pressed', String(state.paused));updateStatus();if (!state.paused) loadActive(false);});
 setInterval(() => { if (!state.paused && !document.hidden) loadActive(false); }, 60000);
@@ -232,7 +233,38 @@ $('rotate').addEventListener('click', () => globe?.setRotation(!rotating));
 $('zoom-in').addEventListener('click', () => globe?.zoom(-1));
 $('zoom-out').addEventListener('click', () => globe?.zoom(1));
 $('reset').addEventListener('click', () => globe?.reset());
-$('about-toggle').addEventListener('click', () => {$('about').hidden = !$('about').hidden;$('about-toggle').setAttribute('aria-expanded', String(!$('about').hidden));if (!$('about').hidden) $('about').scrollIntoView({behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start'});});
+// Native dialogs provide keyboard focus containment, Escape and focus restoration.
+function setDataView(view) {
+ $('readings').scrollTop = 0;
+ document.querySelector('.event-panel').hidden = view !== 'locations';
+ document.querySelector('.event-detail').hidden = view !== 'details';
+ document.querySelectorAll('[data-view]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.view === view)));
+ document.querySelectorAll('[data-widget]').forEach(button => button.setAttribute('aria-expanded', String($('readings').open && button.dataset.widget === view)));
+}
+function openWidget(name) {
+ const id = ['locations', 'details'].includes(name) ? 'readings' : name;
+ const dialog = $(id);
+ if (dialog.open && ['locations', 'details'].includes(name)) { setDataView(name);document.querySelector(`[data-view="${name}"]`).focus();return; }
+ document.querySelectorAll('.widget-dialog[open]').forEach(open => open.close());
+ if (['locations', 'details'].includes(name)) setDataView(name);
+ dialog.showModal();
+ dialog.scrollTop = 0;
+ document.querySelectorAll('[data-widget]').forEach(button => button.setAttribute('aria-expanded', String(button.dataset.widget === name)));
+}
+document.querySelectorAll('[data-widget]').forEach(button => button.addEventListener('click', () => openWidget(button.dataset.widget)));
+document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => setDataView(button.dataset.view)));
+document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', () => $(button.dataset.close).close()));
+document.querySelectorAll('.widget-dialog').forEach(dialog => {
+ let outsideDown = false;
+ const outside = event => {const r = dialog.getBoundingClientRect();return event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom;};
+ dialog.addEventListener('pointerdown', event => { outsideDown = outside(event); });
+ dialog.addEventListener('click', event => {if (outsideDown && outside(event)) dialog.close();outsideDown = false;});
+ dialog.addEventListener('close', () => {
+  document.querySelectorAll('[data-widget]').forEach(button => {if (button.getAttribute('aria-controls') === dialog.id) button.setAttribute('aria-expanded', 'false');});
+ });
+});
+setDataView('locations');
+
 async function initializeGlobe() {
  try {
   const { createGlobe } = await import('./globe.js');
