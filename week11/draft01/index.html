@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Saving a Wirkd</title>
+</head>
+
+<style>
+
+</style>
+
+<body>
+
+  <input id="word">
+  
+  <script>
+
+    const wordInput = document.getElementById('#word');
+
+    wordInput.value = localStorage.getItem('saveWord'>
+
+    wordInput.addEventListerner('input', function() {
+      localStorage.setItem('saveWord', wordInput.value);
+    }
+
+  </script>
+
+
+</body>
+</html>

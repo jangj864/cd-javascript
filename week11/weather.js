@@ -14,16 +14,17 @@ export const SITES = [
  ['Dakar, Senegal',14.72,-17.47],['Addis Ababa, Ethiopia',9.03,38.75],['Tehran, Iran',35.69,51.39],['Istanbul, Türkiye',41.01,28.98],
 ].map(([name, latitude, longitude], index) => ({ id: `weather-${index}`, name, latitude, longitude }));
 
-export function weatherURL() {
+export function weatherURL(sites = SITES) {
  const params = new URLSearchParams({
-  latitude: SITES.map(site => site.latitude).join(','), longitude: SITES.map(site => site.longitude).join(','),
+  latitude: sites.map(site => site.latitude).join(','), longitude: sites.map(site => site.longitude).join(','),
   current: 'temperature_2m,precipitation', hourly: 'temperature_2m,precipitation',
   past_hours: '6', forecast_hours: '1', timezone: 'GMT', timeformat: 'unixtime', temperature_unit: 'celsius', precipitation_unit: 'mm',
  });
  return `https://api.open-meteo.com/v1/forecast?${params}`;
 }
-export function parseWeather(payload) {
- if (!Array.isArray(payload) || payload.length !== SITES.length) throw new Error('Incomplete multi-location weather feed');
+export function parseWeather(payload, sites = SITES) {
+ if (!Array.isArray(payload)) payload = [payload];
+ if (payload.length !== sites.length) throw new Error('Incomplete multi-location weather feed');
  return payload.flatMap((data, index) => {
   const current = data.current;
   if (data.current_units?.temperature_2m !== '°C' || data.current_units?.precipitation !== 'mm') throw new Error('Unexpected weather units');
@@ -33,6 +34,6 @@ export function parseWeather(payload) {
    const precipitation = data.hourly.precipitation?.[i];
    return Number.isFinite(time) && time <= current.time && Number.isFinite(temperature) && Number.isFinite(precipitation) && precipitation >= 0 ? [{ time: time * 1000, temperature, precipitation }] : [];
   }).slice(-6);
-  return [{ ...SITES[index], temperature: current.temperature_2m, precipitation: current.precipitation, interval: current.interval, time: current.time * 1000, history }];
+  return [{ ...sites[index], temperature: current.temperature_2m, precipitation: current.precipitation, interval: current.interval, time: current.time * 1000, history }];
  });
 }

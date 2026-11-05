@@ -1,3 +1,4 @@
+import { initializeCountrySearch } from './country-search.js';
 import { OZONE_SNAPSHOT, ozoneURLs, mergeOzone } from './ozone.js';
 import { SITES, weatherURL, parseWeather } from './weather.js';
 
@@ -7,6 +8,8 @@ const WEATHER_INTERVAL = 15 * 60 * 1000;
 const makeFeed = () => ({ items: [], selected: null, updated: null, loading: false, error: '', previous: new Map() });
 const state = { layer: 'temperature', paused: false, weather: makeFeed(), seismic: makeFeed(), filters: { temperature: -30, precipitation: 0, seismic: 0 } };
 const ozone = { data: OZONE_SNAPSHOT, snapshot: true, loading: false, checked: null, error: '' };
+const extraSites = new Map();
+const activeSites = () => [...SITES, ...extraSites.values()];
 let globe = null;
 let rotating = !matchMedia('(prefers-reduced-motion: reduce)').matches;
 const currentFeed = () => state.layer === 'seismic' ? state.seismic : state.weather;
@@ -34,7 +37,7 @@ function updateStatus() {
  else if (!feed.updated) $('status').textContent = state.layer === 'seismic' ? 'Connecting to USGS…' : 'Connecting to Open-Meteo…';
  else {
   const count = visibleItems().length;
-  $('status').textContent = count ? state.layer === 'seismic' ? `${count} events / past 24 hours${state.paused ? ' · Paused' : ''}` : `${count} / ${SITES.length} samples · ${state.layer === 'temperature' ? 'Hottest' : 'Wettest'} first${state.paused ? ' · Paused' : ''}` : 'No results. Lower the filter to see more.';
+  $('status').textContent = count ? state.layer === 'seismic' ? `${count} events / past 24 hours${state.paused ? ' · Paused' : ''}` : `${count} / ${activeSites().length} samples · ${state.layer === 'temperature' ? 'Hottest' : 'Wettest'} first${state.paused ? ' · Paused' : ''}` : 'No results. Lower the filter to see more.';
  }
 }
 function selectItem(id, focus = false) {
@@ -148,6 +151,7 @@ function render() {
   row.append(number, info, arrow);row.addEventListener('click', () => selectItem(item.id, true));li.append(row);fragment.append(li);
  }
  $('event-list').replaceChildren(fragment);
+ if (!seismic) $('sampling-note').textContent = `${activeSites().length} LOCATION SAMPLES · ${state.layer === 'temperature' ? 'ABSOLUTE TEMPERATURE, NOT WARMING ANOMALY' : 'ACCUMULATED RAIN + SNOW / MODEL INTERVAL'}`;
  $('visible-count').textContent = String(items.length).padStart(2, '0');
  $('log-heading').textContent = seismic ? 'RECENT TREMORS' : 'SAMPLED LOCATIONS';
  $('stat-one-label').textContent = seismic ? 'EVENTS / 24H' : 'HOTTEST SAMPLE';
@@ -170,13 +174,14 @@ async function loadWeather(force = false) {
  feed.loading = true;updateStatus();
  const controller = new AbortController();const timeout = setTimeout(() => controller.abort(), 30000);
  try {
-  const response = await fetch(weatherURL(), { signal: controller.signal });
+  const sites = activeSites();
+  const response = await fetch(weatherURL(sites), { signal: controller.signal });
   if (!response.ok) throw new Error(`Weather HTTP ${response.status}`);
-  const items = parseWeather(await response.json());
+  const items = parseWeather(await response.json(), sites);
   if (!items.length) throw new Error('No valid weather samples');
   feed.previous = new Map(feed.items.map(item => [item.id, item]));
-  feed.items = items;feed.updated = Date.now();
-  feed.error = items.some(item => Date.now() - item.time > 2 * 3600000) ? 'Source model is delayed. Showing its latest valid times.' : items.length < SITES.length ? `${items.length} / ${SITES.length} samples available. Missing values omitted.` : '';
+  feed.items = [...items, ...feed.items.filter(item => extraSites.has(item.id) && !sites.some(site => site.id === item.id))];feed.updated = Date.now();
+  feed.error = items.some(item => Date.now() - item.time > 2 * 3600000) ? 'Source model is delayed. Showing its latest valid times.' : items.length < sites.length ? `${items.length} / ${activeSites().length} samples available. Missing values omitted.` : '';
  } catch {
   feed.error = feed.updated ? `Weather connection interrupted. Retaining data fetched ${utcTime(feed.updated)} UTC.` : 'Weather unavailable. Select Refresh to retry; seismic data is separate.';
  } finally {
@@ -258,7 +263,7 @@ function changeLayer(layer) {
  $('ozone-focus').hidden = layer !== 'ozone';
  $('ozone-settings-note').hidden = layer !== 'ozone';
  document.querySelector('.filter').hidden = layer === 'ozone';
- $('data-launch-label').textContent = layer === 'ozone' ? 'OZONE REPORT' : 'LOCATIONS';
+ $('data-launch-label').textContent = layer === 'ozone' ? 'OZONE REPORT' : 'SEARCH';
  setDataView(document.querySelector('[data-view][aria-pressed=true]')?.dataset.view || 'locations');
  if (layer === 'ozone') {
   $('layer-caption').textContent = 'ANTARCTIC OZONE / NASA DAILY';
@@ -274,7 +279,7 @@ function changeLayer(layer) {
  $('magnitude').min = min;$('magnitude').max = max;$('magnitude').step = step;$('magnitude').value = state.filters[layer];
  $('filter-label').textContent = layer === 'temperature' ? 'MIN TEMPERATURE' : layer === 'precipitation' ? 'MIN PRECIPITATION' : 'MIN MAGNITUDE';
  $('layer-caption').textContent = layer === 'temperature' ? 'CURRENT AIR TEMPERATURE / °C' : layer === 'precipitation' ? 'CURRENT PRECIPITATION / MM PER INTERVAL' : 'SEISMIC ACTIVITY / PAST 24H';
- $('sampling-note').textContent = layer === 'seismic' ? 'SEPARATE GEOLOGICAL FEED · NOT A CLIMATE INDICATOR' : `${SITES.length} CITY SAMPLES · ${layer === 'temperature' ? 'ABSOLUTE TEMPERATURE, NOT WARMING ANOMALY' : 'ACCUMULATED RAIN + SNOW / MODEL INTERVAL'}`;
+ $('sampling-note').textContent = layer === 'seismic' ? 'SEPARATE GEOLOGICAL FEED · NOT A CLIMATE INDICATOR' : `${activeSites().length} LOCATION SAMPLES · ${layer === 'temperature' ? 'ABSOLUTE TEMPERATURE, NOT WARMING ANOMALY' : 'ACCUMULATED RAIN + SNOW / MODEL INTERVAL'}`;
  $('legend').replaceChildren();
  if (layer === 'temperature') {
   const bar = document.createElement('span');bar.className = 'heat-scale';$('legend').append(bar);
@@ -320,6 +325,7 @@ function openWidget(name) {
  if (['locations', 'details'].includes(name)) setDataView(name);
  dialog.showModal();
  dialog.scrollTop = 0;
+ if (name === 'locations' && state.layer !== 'ozone') $('country-search').focus({preventScroll: true});
  document.querySelectorAll('[data-widget]').forEach(button => button.setAttribute('aria-expanded', String(button.dataset.widget === name)));
 }
 document.querySelectorAll('[data-widget]').forEach(button => button.addEventListener('click', () => openWidget(button.dataset.widget)));
@@ -336,6 +342,34 @@ document.querySelectorAll('.widget-dialog').forEach(dialog => {
 });
 setDataView('locations');
 
+async function selectCountry(country, signal) {
+ const site = {id: `country-${country.code}`, name: `${country.name} / reference point`, latitude: country.latitude, longitude: country.longitude};
+ const controller = new AbortController();
+ const abort = () => controller.abort();
+ if (signal.aborted) throw new DOMException('Search canceled', 'AbortError');
+ signal.addEventListener('abort', abort, {once: true});
+ const timeout = setTimeout(abort, 20000);
+ try {
+  // A country coordinate represents one model sample, not a national average.
+  const response = await fetch(weatherURL([site]), {signal: controller.signal});
+  if (!response.ok) throw new Error('Country weather unavailable');
+  const [item] = parseWeather(await response.json(), [site]);
+  if (!item) throw new Error('Country weather sample missing');
+  if (signal.aborted) throw new DOMException('Search canceled', 'AbortError');
+  extraSites.set(site.id, site);
+  state.weather.items = [...state.weather.items.filter(existing => existing.id !== site.id), item];
+  // Keep the timestamp of the multi-location feed: this sample has its own valid time.
+  if (!state.weather.updated) { state.weather.updated = Date.now();state.weather.error = 'Showing a searched reference point; the initial weather feed is unavailable.'; }
+  state.weather.selected = item.id;
+  if (!['temperature', 'precipitation'].includes(state.layer)) changeLayer('temperature');
+  state.filters[state.layer] = state.layer === 'temperature' ? -30 : 0;
+  $('magnitude').value = state.filters[state.layer];updateThreshold();render();
+  selectItem(item.id, true);
+ } finally {
+  clearTimeout(timeout);signal.removeEventListener('abort', abort);
+ }
+}
+initializeCountrySearch(selectCountry);
 async function initializeGlobe() {
  try {
   const { createGlobe } = await import('./globe.js');

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>List of Words</title>
+</head>
+
+<style>
+
+</style>
+
+<body>
+
+  <input id="wordInput">
+  <button id="addButton">Add</button>
+  <ul id="list"></ul>
+
+  <script>
+
+    const wordInput = document.querySelector('#wordInput');
+    const addButton = document.querySelector('#addButton');
+    const list = document.querySelector('#list');
+
+    let wordsArray = [];
+
+    function addWordToList(word) {
+      const newlistItem = document.createElement('li');
+      newlistItem.textContent = word;
+      list.append(newlistItem);
+    }
+
+    addButton.addEventListener('click', function() {
+      wordsArray.push(wordInput.value);
+      addWordToList(wordInput.value);
+      localStorage.setItem('savedWordsLists', JSON.stringify(wordsArray));
+      wordInput.value = '';
+
+    });
+
+    const savedJSON = localStorage.getItem('savedWordsLists');
+
+    if (savedJSON) {
+      wordsArray = JSON.parse(savedJSON);
+      
+      wordsArray.forEach(function(savedWord) {
+        addWordToList(savedWord);
+      });
+    }
+
+
+  </script>
+
+</body>
+
+</html>
