@@ -81,7 +81,7 @@ function animate(time){
  const key=`${heatStage}:${tearStage}:${shakeStage}:${r.shake>0}:${r.tears>.04}`;
  if(key!==thoughtKey){thoughtKey=key;thoughtIndex=0;}
  setText('feeling',thoughts[thoughtIndex%thoughts.length].replace(/[“”]/g,''));
- setText('reaction-note','drag gently left or right · double-click to centre');
+ setText('reaction-note','move your pointer · earth follows your gaze');
  const description=`A blue 3D Earth face is ${r.scream?'surrounded by a warm atmosphere and opening its mouth':'surrounded by a temperature-coloured atmosphere'}, ${r.shake>0?'shaking its head at intensity '+(shakeStage+1):'not shaking'}, and ${r.tears>.04?'crying at intensity '+(tearStage+1):'not crying'}. Reactions happen together, based on the displayed observations.`;
  if($('planet').getAttribute('aria-label')!==description)$('planet').setAttribute('aria-label',description);
  sound.tick(r,time);
