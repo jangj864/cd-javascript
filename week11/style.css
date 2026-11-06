@@ -23,8 +23,9 @@ main{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;p
 #globe{position:absolute;inset:0}
 .planet canvas{display:block;width:100%;height:100%}
 figcaption{position:absolute;z-index:2;right:clamp(18px,3vw,54px);bottom:clamp(28px,8%,84px);width:260px}
-.speech{border:3px solid #151b20;position:relative;width:100%;padding:21px 37px 23px 24px;border-radius:28px;background:#faf9f4;color:#222b30;text-align:left;transition:transform .15s}
-.speech:after{content:"";position:absolute;left:-12px;top:50%;width:20px;height:20px;transform:translateY(-50%) rotate(45deg);background:#faf9f4;border-left:3px solid #151b20;border-bottom:3px solid #151b20;pointer-events:none}
+.speech{isolation:isolate;border:3px solid transparent;position:relative;width:100%;padding:21px 37px 23px 24px;border-radius:28px;background:none;color:#222b30;text-align:left;transition:transform .15s}
+.speech-shape{position:absolute;left:-3px;top:-3px;width:calc(100% + 6px);height:calc(100% + 6px);overflow:visible;z-index:-1;pointer-events:none}
+.speech-shape path{fill:#faf9f4;stroke:#151b20;stroke-width:3;stroke-linejoin:round;stroke-linecap:round}
 .speech:hover{color:#222b30;transform:translateY(-2px)}
 .speech:active{transform:scale(.98)}
 #feeling{font:650 21px/1.3 Arial,Helvetica,sans-serif;letter-spacing:-.035em;display:block}
@@ -53,7 +54,6 @@ noscript{padding:16px;text-align:center}
 @media(max-width:950px){
  figcaption{left:50%;right:auto;top:clamp(8px,2svh,20px);bottom:auto;width:min(260px,calc(100% - 24px));transform:translateX(-50%)}
  .speech{padding:18px 28px 22px 20px}
- .speech:after{left:50%;top:auto;bottom:-12px;transform:translateX(-50%) rotate(45deg);border-left:0;border-right:3px solid #151b20}
  #feeling{font-size:20px}
 }
 @media(max-width:600px){

@@ -86,6 +86,28 @@ function animate(time){
  if($('planet').getAttribute('aria-label')!==description)$('planet').setAttribute('aria-label',description);
  sound.tick(r,time);
 }
+// Draw body and tail as one contour, keeping a consistent border at every size.
+const speechLayout=matchMedia('(max-width:950px)');
+function resizeSpeech(){
+ const w=$('speech').offsetWidth,h=$('speech').offsetHeight;
+ if(!w||!h)return;
+ const a=1.5,right=w-a,bottom=h-a,cx=w/2,cy=h/2;
+ const radius=Math.min(26,(h-34)/2,w/4);
+ let path=`M ${a+radius} ${a} H ${right-radius} Q ${right} ${a} ${right} ${a+radius} V ${bottom-radius} Q ${right} ${bottom} ${right-radius} ${bottom}`;
+ if(speechLayout.matches){
+  path+=` H ${cx+18} C ${cx+9} ${bottom} ${cx+8} ${bottom+8} ${cx+3} ${bottom+17} Q ${cx} ${bottom+22} ${cx-3} ${bottom+17} C ${cx-8} ${bottom+8} ${cx-9} ${bottom} ${cx-18} ${bottom}`;
+ }
+ path+=` H ${a+radius} Q ${a} ${bottom} ${a} ${bottom-radius}`;
+ if(!speechLayout.matches){
+  path+=` V ${cy+16} C ${a} ${cy+8} -5 ${cy+7} -17 ${cy+3} Q -22 ${cy} -17 ${cy-3} C -5 ${cy-7} ${a} ${cy-8} ${a} ${cy-16}`;
+ }
+ path+=` V ${a+radius} Q ${a} ${a} ${a+radius} ${a} Z`;
+ $('speech-shape').setAttribute('viewBox',`0 0 ${w} ${h}`);
+ $('speech-outline').setAttribute('d',path);
+}
+new ResizeObserver(resizeSpeech).observe($('speech'));
+speechLayout.addEventListener('change',resizeSpeech);
+resizeSpeech();
 $('speech').addEventListener('click',()=>{thoughtIndex++;});
 $('sound').addEventListener('click',async()=>{
  try{const enabled=await sound.toggle();$('sound').setAttribute('aria-pressed',String(enabled));$('sound').innerHTML=enabled?'sound on <span aria-hidden="true">◉</span>':'sound off <span aria-hidden="true">◌</span>';}
