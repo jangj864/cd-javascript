@@ -1,384 +1,103 @@
-import { initializeCountrySearch } from './country-search.js';
-import { OZONE_SNAPSHOT, ozoneURLs, mergeOzone } from './ozone.js';
-import { SITES, weatherURL, parseWeather } from './weather.js';
+import {createEarth} from './globe.js';
+import {EarthSound} from './sound.js';
+import {CLIMATE_SNAPSHOT,TEMP_URL,SEA_URL,QUAKE_URL,RAIN_URL,parseTemperature,parseSea,parseRain,parseQuakes,getReaction} from './climate.js';
 
-const FEED_URL = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson';
-const $ = id => document.getElementById(id);
-const WEATHER_INTERVAL = 15 * 60 * 1000;
-const makeFeed = () => ({ items: [], selected: null, updated: null, loading: false, error: '', previous: new Map() });
-const state = { layer: 'temperature', paused: false, weather: makeFeed(), seismic: makeFeed(), filters: { temperature: -30, precipitation: 0, seismic: 0 } };
-const ozone = { data: OZONE_SNAPSHOT, snapshot: true, loading: false, checked: null, error: '' };
-const extraSites = new Map();
-const activeSites = () => [...SITES, ...extraSites.values()];
-let globe = null;
-let rotating = !matchMedia('(prefers-reduced-motion: reduce)').matches;
-const currentFeed = () => state.layer === 'seismic' ? state.seismic : state.weather;
-const utcTime = time => new Date(time).toLocaleTimeString('en-GB', { timeZone: 'UTC', hour12: false });
-const formatDate = time => new Date(time).toLocaleString('en-GB', { timeZone: 'UTC', dateStyle: 'medium', timeStyle: 'short' }) + ' UTC';
-const duration = seconds => `${seconds / 60} MIN`;
-const quakeName = event => event.properties.place || 'Unnamed seismic region';
-const weatherValue = item => state.layer === 'temperature' ? item.temperature : item.precipitation;
-const temperatureColor = temp => temp >= 35 ? '#ff4c51' : temp >= 25 ? '#ff8c58' : temp >= 15 ? '#ffc77d' : temp >= 0 ? '#7bcdf4' : '#8397ff';
-function visibleItems() {
- const items = currentFeed().items;
- const min = state.filters[state.layer];
- if (state.layer === 'seismic') return items.filter(item => min === 0 || item.properties.mag >= min);
- return items.filter(item => min === (state.layer === 'temperature' ? -30 : 0) || weatherValue(item) >= min)
-  .sort((a, b) => weatherValue(b) - weatherValue(a));
+const $=id=>document.getElementById(id);
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const data={temperature:{...CLIMATE_SNAPSHOT.temperature},sea:{...CLIMATE_SNAPSHOT.sea},rain:null,quakes:null};
+const feeds={temperature:{busy:false,checked:0,failed:false},sea:{busy:false,checked:0,failed:false},rain:{busy:false,checked:0,failed:false},quakes:{busy:false,checked:0,failed:false}};
+const intervals={temperature:86400000,sea:86400000,rain:900000,quakes:60000};
+const parsers={temperature:parseTemperature,sea:parseSea,rain:parseRain,quakes:parseQuakes};
+const urls={temperature:TEMP_URL,sea:SEA_URL,rain:RAIN_URL,quakes:QUAKE_URL};
+const sound=new EarthSound();
+let earth=null,lastFrame=0,smoothHeat=0;
+let thoughtIndex=0,thoughtKey='';
+function setText(id,text){if($(id).textContent!==text)$(id).textContent=text;}
+const dateLabel=date=>new Date(date+'-01T00:00:00Z').toLocaleDateString('en-US',{month:'short',year:'numeric',timeZone:'UTC'});
+const timeLabel=time=>new Date(time).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'UTC'})+' UTC';
+function updateReadings(){
+ $('temperature-value').textContent=`${data.temperature.value>=0?'+':''}${data.temperature.value.toFixed(2)}°C`;
+ $('temperature-date').textContent=dateLabel(data.temperature.date)+(data.temperature.saved?' · saved':'');
+ $('temperature-source-note').textContent=`Shown: ${dateLabel(data.temperature.date)}${data.temperature.saved?' (saved observation; direct refresh unavailable or pending)':''}.`;
+ $('sea-value').textContent=`+${data.sea.value.toFixed(1)} mm`;
+ $('sea-date').textContent=dateLabel(data.sea.date)+(data.sea.saved?' · saved':'');
+ $('sea-source-note').textContent=`Shown: ${dateLabel(data.sea.date)}${data.sea.saved?' (saved observation; direct refresh unavailable or pending)':''}.`;
+ $('quake-value').textContent=data.quakes?`${data.quakes.current} /h`:'—';
+ if(data.quakes){const change=data.quakes.current-data.quakes.previous;$('quake-change').textContent=`${change>=0?'+':''}${change} vs previous hour${feeds.quakes.failed?' · old data':''}`;}
+ else $('quake-change').textContent=feeds.quakes.failed?'feed unavailable':'last hour';
+ $('quake-source-note').textContent=data.quakes?`Feed generated ${timeLabel(data.quakes.time)}; ${data.quakes.current} events vs ${data.quakes.previous} in the preceding hour${feeds.quakes.failed?'; latest refresh failed':''}.`:'Feed unavailable or pending; no automatic shaking without data.';
+ $('rain-value').textContent=data.rain?`${data.rain.value.toFixed(2)}`:'—';
+ $('rain-date').textContent=data.rain?`mm/h · ${timeLabel(data.rain.time)}${feeds.rain.failed?' · old':''}`:feeds.rain.failed?'feed unavailable':'mm/h · 36 samples';
+ $('rain-source-note').textContent=data.rain?`Model valid ${timeLabel(data.rain.time)}; 36/36 samples${feeds.rain.failed?'; latest refresh failed':''}.`:'Model unavailable or pending; rain adds no tears until data arrives.';
+ const busy=Object.values(feeds).some(feed=>feed.busy),failed=Object.values(feeds).some(feed=>feed.failed);
+ $('feed-status').textContent=busy?'checking the data…':failed||data.temperature.saved||data.sea.saved?'live + dated readings · ? for sources':'connected to the data';
+ $('refresh').disabled=busy;
 }
-function updateStatus() {
- if (state.layer === 'ozone') { updateOzoneStatus();return; }
- const feed = currentFeed();
- $('connection').textContent = feed.loading ? 'SYNCHRONIZING' : feed.error ? 'DATA DELAYED' : state.paused ? 'UPDATES PAUSED' : feed.updated ? 'RECEIVING LIVE DATA' : 'AWAITING DATA';
- $('refresh').disabled = feed.loading;
- $('synced').textContent = feed.updated ? `FETCHED ${utcTime(feed.updated)} UTC` : 'AWAITING DATA';
- $('sync-cycle').textContent = state.layer === 'seismic' ? '/ 60 SEC SYNC' : '/ 15 MIN SYNC';
- if (feed.error) $('status').textContent = feed.error;
- else if (!feed.updated) $('status').textContent = state.layer === 'seismic' ? 'Connecting to USGS…' : 'Connecting to Open-Meteo…';
- else {
-  const count = visibleItems().length;
-  $('status').textContent = count ? state.layer === 'seismic' ? `${count} events / past 24 hours${state.paused ? ' · Paused' : ''}` : `${count} / ${activeSites().length} samples · ${state.layer === 'temperature' ? 'Hottest' : 'Wettest'} first${state.paused ? ' · Paused' : ''}` : 'No results. Lower the filter to see more.';
- }
+async function refreshFeed(key,force=false){
+ const feed=feeds[key];if(feed.busy||(!force&&Date.now()-feed.checked<intervals[key]))return;
+ feed.busy=true;feed.checked=Date.now();updateReadings();
+ const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),15000);
+ try{
+  const response=await fetch(urls[key],{signal:controller.signal});if(!response.ok)throw new Error('Source unavailable');
+  const payload=['temperature','sea'].includes(key)?await response.text():await response.json();
+  const next=parsers[key](payload);
+  if(['temperature','sea'].includes(key)&&next.date<data[key].date)throw new Error('Older climate source');
+  data[key]=next;feed.failed=false;
+ }catch{feed.failed=true;}
+ finally{clearTimeout(timeout);feed.busy=false;updateReadings();}
 }
-function selectItem(id, focus = false) {
- if (state.layer === 'ozone') { if (focus) openWidget('details');return; }
- const feed = currentFeed();
- const item = feed.items.find(entry => entry.id === id);
- if (!item) return;
- feed.selected = id;
- document.querySelectorAll('[data-event]').forEach(row => {
-  row.classList.toggle('selected', row.dataset.event === id);
-  row.setAttribute('aria-pressed', String(row.dataset.event === id));
- });
- globe?.select(id, focus);
- const seismic = state.layer === 'seismic';
- const [lon, lat, depth] = seismic ? item.geometry.coordinates : [item.longitude, item.latitude];
- $('detail-label').textContent = seismic ? 'SELECTED EPICENTER' : 'SELECTED CITY SAMPLE';
- $('detail-mag').textContent = (seismic ? item.properties.mag : weatherValue(item)).toFixed(1);
- $('detail-mag').style.color = seismic ? '#fff1e5' : state.layer === 'temperature' ? temperatureColor(item.temperature) : '#78d8ff';
- $('detail-unit').textContent = seismic ? 'MAGNITUDE' : state.layer === 'temperature' ? 'AIR TEMP / °C' : `MM / ${duration(item.interval)}`;
- $('detail-heading').textContent = seismic ? quakeName(item) : item.name;
- $('detail-time').textContent = `${seismic ? 'EVENT' : 'MODEL VALID'} / ${formatDate(seismic ? item.properties.time : item.time)}`;
- $('detail-lat').textContent = `${Math.abs(lat).toFixed(2)}° ${lat >= 0 ? 'N' : 'S'}`;
- $('detail-lon').textContent = `${Math.abs(lon).toFixed(2)}° ${lon >= 0 ? 'E' : 'W'}`;
- $('secondary-label').textContent = seismic ? 'DEPTH' : state.layer === 'temperature' ? `PRECIPITATION / ${duration(item.interval)}` : 'AIR TEMPERATURE / 2 M';
- $('detail-depth').textContent = seismic ? Number.isFinite(depth) ? `${depth.toFixed(1)} KM` : 'UNKNOWN' : state.layer === 'temperature' ? `${item.precipitation.toFixed(2)} MM` : `${item.temperature.toFixed(1)} °C`;
- $('event-id').textContent = seismic ? `USGS / ${item.id.toUpperCase()}` : `OPEN-METEO / ${duration(item.interval)} MODEL INTERVAL`;
- $('weather-history').hidden = seismic;
- $('data-change').textContent = '';
- if (!seismic) {
-  renderHistory(item);
-  const previous = feed.previous.get(id);
-  if (previous && previous.time < item.time) {
-   const change = weatherValue(item) - weatherValue(previous);
-   $('data-change').textContent = `${change >= 0 ? '+' : ''}${change.toFixed(state.layer === 'temperature' ? 1 : 2)}${state.layer === 'temperature' ? '°C' : ' MM'} since model valid ${utcTime(previous.time)} UTC`;
-  } else $('data-change').textContent = 'Values refresh when the model advances.';
- }
- let url = seismic ? item.properties.url : 'https://open-meteo.com/en/docs';
- try {
-  const parsed = new URL(url);
-  if (parsed.protocol !== 'https:' || !['earthquake.usgs.gov', 'open-meteo.com'].includes(parsed.hostname)) url = null;
- } catch { url = null; }
- $('event-link').hidden = !url;
- if (url) $('event-link').href = url;
- else $('event-link').removeAttribute('href');
- $('event-link').textContent = seismic ? 'EXPLORE USGS RECORD ↗' : 'OPEN-METEO / DATA SOURCE ↗';
- if (focus) openWidget('details');
+function refreshAll(force=false){return Promise.all(Object.keys(feeds).map(key=>refreshFeed(key,force)));}
+function reaction(){
+ const real=getReaction(data);
+ if(data.rain&&Date.now()-data.rain.time>2*3600000)real.tears=getReaction({...data,rain:null}).tears;
+ if(data.quakes&&Date.now()-data.quakes.time>15*60000)real.shake=0;
+ return real;
 }
-function renderHistory(item) {
- const chart = $('history-chart');
- chart.replaceChildren();
- const water = state.layer === 'precipitation';
- $('weather-history').querySelector('.history-label').textContent = water ? 'RECENT 6H · PRECIP / PRECEDING HOUR' : 'RECENT 6H · AIR TEMP / °C';
- const history = item.history;
- if (history.length < 2) {
-  $('history-summary').textContent = 'Recent hourly history unavailable.';
-  return;
- }
- const values = history.map(point => water ? point.precipitation : point.temperature);
- const min = water ? 0 : Math.min(...values) - 1;
- const max = water ? Math.max(0.1, ...values) : Math.max(...values) + 1;
- const ns = 'http://www.w3.org/2000/svg';
- if (water) {
-  history.forEach((point, i) => {
-   const bar = document.createElementNS(ns, 'rect');
-   const height = point.precipitation / max * 39;
-   bar.setAttribute('x', String(8 + i / history.length * 204));
-   bar.setAttribute('y', String(48 - height));bar.setAttribute('width', String(204 / history.length - 5));
-   bar.setAttribute('height', String(height));bar.setAttribute('fill', '#78d8ff');bar.setAttribute('rx', '2');chart.append(bar);
-  });
- } else {
-  const path = document.createElementNS(ns, 'polyline');
-  path.setAttribute('points', history.map((point, i) => `${8 + i / (history.length - 1) * 204},${48 - (point.temperature - min) / (max - min) * 39}`).join(' '));
-  path.setAttribute('fill', 'none');path.setAttribute('stroke', temperatureColor(item.temperature));path.setAttribute('stroke-width', '2');chart.append(path);
- }
- const baseline = document.createElementNS(ns, 'line');
- baseline.setAttribute('x1', '8');baseline.setAttribute('x2', '212');baseline.setAttribute('y1', '49');baseline.setAttribute('y2', '49');baseline.setAttribute('stroke', '#7d8c9e44');chart.append(baseline);
- chart.setAttribute('aria-label', `${item.name}: ${history.map(point => `${utcTime(point.time)} UTC ${water ? point.precipitation + ' millimeters in the preceding hour' : point.temperature + ' degrees Celsius'}`).join(', ')}`);
- const first = history[0]; const last = history.at(-1);
- $('history-summary').textContent = `${utcTime(first.time).slice(0, 5)}–${utcTime(last.time).slice(0, 5)} UTC · ${Math.min(...values).toFixed(1)}–${Math.max(...values).toFixed(1)}${water ? ' MM / HOUR' : '°C'}`;
+function animate(time){
+ requestAnimationFrame(animate);if(document.hidden)return;
+ if(time-lastFrame<32)return;
+ const dt=Math.min(50,time-lastFrame);lastFrame=time;
+ const r=reaction();smoothHeat+= (r.heat-smoothHeat)*(reduced?1:1-Math.exp(-dt*.003));
+ if(earth)earth.draw({...r,heat:smoothHeat},time,reduced);
+ const stage=value=>value>.66?2:value>.28?1:0;
+ const heatStage=stage(r.heat),tearStage=stage(r.tears),shakeStage=stage(r.shake);
+ const thoughts=[];
+ if(r.heat>.05)thoughts.push(...[
+  ['“is it getting warm, or is it me?”','“a little shade would be nice.”'],
+  ['“could someone turn the heat down?”','“i could really use a cool breeze.”'],
+  ['“it’s too hot in here.”','“i’m burning up!”','“this is more than a bad fever.”']
+ ][heatStage]);
+ if(r.shake>0)thoughts.push(...[
+  ['“something’s making me restless.”','“a little unsteady today.”'],
+  ['“no. no. no.”','“i can’t keep my head still.”'],
+  ['“everything is shaking!”','“please, give me a moment to settle.”']
+ ][shakeStage]);
+ if(r.tears>.04)thoughts.push(...[
+  ['“just a little teary today.”','“i think i need a tissue.”'],
+  ['“i’m a little overwhelmed.”','“the water keeps coming.”'],
+  ['“i can’t stop crying.”','“that’s a whole ocean of feelings.”','“i’m trying to hold it together.”']
+ ][tearStage]);
+ if(!thoughts.length)thoughts.push('“still here.”','“a quiet moment. finally.”');
+ const key=`${heatStage}:${tearStage}:${shakeStage}:${r.shake>0}:${r.tears>.04}`;
+ if(key!==thoughtKey){thoughtKey=key;thoughtIndex=0;}
+ setText('feeling',thoughts[thoughtIndex%thoughts.length].replace(/[“”]/g,''));
+ setText('reaction-note','drag gently left or right · double-click to centre');
+ const description=`A blue 3D Earth face is ${r.scream?'surrounded by a warm atmosphere and opening its mouth':'surrounded by a temperature-coloured atmosphere'}, ${r.shake>0?'shaking its head at intensity '+(shakeStage+1):'not shaking'}, and ${r.tears>.04?'crying at intensity '+(tearStage+1):'not crying'}. Reactions happen together, based on the displayed observations.`;
+ if($('planet').getAttribute('aria-label')!==description)$('planet').setAttribute('aria-label',description);
+ sound.tick(r,time);
 }
-
-function clearSelection() {
- currentFeed().selected = null;
- globe?.select(null, false);
- $('detail-mag').textContent = '—';
- $('detail-heading').textContent = currentFeed().updated ? 'No matching samples.' : 'Waiting for data.';
- $('detail-time').textContent = currentFeed().updated ? 'Lower the filter to explore more.' : 'Connecting to the current feed…';
- for (const id of ['detail-lat', 'detail-lon', 'detail-depth']) $(id).textContent = '—';
- $('event-id').textContent = 'NO SELECTION';
- $('weather-history').hidden = true;
- $('event-link').hidden = true;
- $('event-link').removeAttribute('href');
- $('data-change').textContent = '';
-}
-function render() {
- if (state.layer === 'ozone') { renderOzone();return; }
- const feed = currentFeed(); const items = visibleItems(); const seismic = state.layer === 'seismic';
- const fragment = document.createDocumentFragment();
- for (const item of items) {
-  const li = document.createElement('li');
-  const row = document.createElement('button');row.type = 'button';row.className = 'event-row';row.dataset.event = item.id;
-  const number = document.createElement('span');number.className = 'row-mag';
-  number.textContent = (seismic ? item.properties.mag : weatherValue(item)).toFixed(1);
-  number.style.color = seismic ? '#ffb16c' : state.layer === 'temperature' ? temperatureColor(item.temperature) : item.precipitation > 0 ? '#78d8ff' : '#667a8e';
-  const info = document.createElement('span');info.className = 'row-info';
-  const name = document.createElement('span');name.className = 'row-place';name.textContent = seismic ? quakeName(item) : item.name;
-  const time = document.createElement('span');time.className = 'row-time';
-  time.textContent = seismic ? `${utcTime(item.properties.time)} UTC / M ${item.properties.mag.toFixed(1)}` : `${state.layer === 'temperature' ? '°C' : `MM / ${duration(item.interval)}`} · ${utcTime(item.time).slice(0, 5)} UTC`;
-  info.append(name, time);
-  const arrow = document.createElement('span');arrow.className = 'row-arrow';arrow.textContent = '↗';arrow.setAttribute('aria-hidden', 'true');
-  row.append(number, info, arrow);row.addEventListener('click', () => selectItem(item.id, true));li.append(row);fragment.append(li);
- }
- $('event-list').replaceChildren(fragment);
- if (!seismic) $('sampling-note').textContent = `${activeSites().length} LOCATION SAMPLES · ${state.layer === 'temperature' ? 'ABSOLUTE TEMPERATURE, NOT WARMING ANOMALY' : 'ACCUMULATED RAIN + SNOW / MODEL INTERVAL'}`;
- $('visible-count').textContent = String(items.length).padStart(2, '0');
- $('log-heading').textContent = seismic ? 'RECENT TREMORS' : 'SAMPLED LOCATIONS';
- $('stat-one-label').textContent = seismic ? 'EVENTS / 24H' : 'HOTTEST SAMPLE';
- $('stat-two-label').textContent = seismic ? 'STRONGEST' : 'WETTEST SAMPLE';
- $('total').textContent = feed.items.length ? seismic ? String(feed.items.length) : `${Math.max(...feed.items.map(item => item.temperature)).toFixed(1)}°` : '—';
- $('strongest').textContent = feed.items.length ? seismic ? `M ${Math.max(...feed.items.map(item => item.properties.mag)).toFixed(1)}` : `${Math.max(...feed.items.map(item => item.precipitation)).toFixed(1)} mm` : '—';
- if (!seismic && feed.items.length) {
-  const intervals = [...new Set(feed.items.map(item => item.interval))];
-  $('stat-two-label').textContent = intervals.length === 1 ? `WETTEST / ${duration(intervals[0])}` : 'WETTEST SAMPLE';
- }
- if (globe) seismic ? globe.setEvents(items) : globe.setWeather(items, state.layer);
- updateStatus();
- const selected = items.find(item => item.id === feed.selected) || items[0];
- if (selected) selectItem(selected.id);
- else clearSelection();
-}
-async function loadWeather(force = false) {
- const feed = state.weather;
- if (feed.loading || (!force && feed.updated && Date.now() - feed.updated < WEATHER_INTERVAL)) return;
- feed.loading = true;updateStatus();
- const controller = new AbortController();const timeout = setTimeout(() => controller.abort(), 30000);
- try {
-  const sites = activeSites();
-  const response = await fetch(weatherURL(sites), { signal: controller.signal });
-  if (!response.ok) throw new Error(`Weather HTTP ${response.status}`);
-  const items = parseWeather(await response.json(), sites);
-  if (!items.length) throw new Error('No valid weather samples');
-  feed.previous = new Map(feed.items.map(item => [item.id, item]));
-  feed.items = [...items, ...feed.items.filter(item => extraSites.has(item.id) && !sites.some(site => site.id === item.id))];feed.updated = Date.now();
-  feed.error = items.some(item => Date.now() - item.time > 2 * 3600000) ? 'Source model is delayed. Showing its latest valid times.' : items.length < sites.length ? `${items.length} / ${activeSites().length} samples available. Missing values omitted.` : '';
- } catch {
-  feed.error = feed.updated ? `Weather connection interrupted. Retaining data fetched ${utcTime(feed.updated)} UTC.` : 'Weather unavailable. Select Refresh to retry; seismic data is separate.';
- } finally {
-  clearTimeout(timeout);feed.loading = false;
-  if (['temperature', 'precipitation'].includes(state.layer)) render();
- }
-}
-async function loadSeismic(force = false) {
- const feed = state.seismic;
- if (feed.loading || (!force && feed.updated && Date.now() - feed.updated < 60000)) return;
- feed.loading = true;updateStatus();
- const controller = new AbortController();const timeout = setTimeout(() => controller.abort(), 15000);
- try {
-  const response = await fetch(FEED_URL, { signal: controller.signal, cache: 'no-store' });
-  if (!response.ok) throw new Error('USGS unavailable');
-  const data = await response.json();
-  if (data.type !== 'FeatureCollection' || !Array.isArray(data.features) || !Number.isFinite(data.metadata?.generated)) throw new Error('Invalid feed');
-  feed.items = data.features.filter(item => {
-   const coords = item.geometry?.coordinates;
-   return item.properties?.type === 'earthquake' && typeof item.id === 'string' && Number.isFinite(item.properties.mag) && Number.isFinite(item.properties.time) && Array.isArray(coords) && Number.isFinite(coords[0]) && Number.isFinite(coords[1]) && Math.abs(coords[0]) <= 180 && Math.abs(coords[1]) <= 90;
-  }).sort((a, b) => b.properties.time - a.properties.time);
-  feed.updated = Date.now();feed.error = Date.now() - data.metadata.generated > 10 * 60000 ? 'USGS source is delayed. Showing its latest available records.' : '';
- } catch { feed.error = feed.updated ? `USGS connection interrupted. Retaining records fetched ${utcTime(feed.updated)} UTC.` : 'USGS unavailable. Select Refresh to retry; weather data is separate.'; }
- finally { clearTimeout(timeout);feed.loading = false;if (state.layer === 'seismic') render(); }
-}
-function updateOzoneStatus() {
- $('connection').textContent = ozone.loading ? 'CHECKING NASA DATA' : ozone.snapshot ? 'OZONE / SAVED DATA' : 'OZONE / DAILY DATA';
- $('refresh').disabled = ozone.loading;
- $('synced').textContent = `OBSERVED ${ozone.data.date}`;
- $('sync-cycle').textContent = '/ DAILY SOURCE · 1H CHECK';
- $('ozone-status').textContent = ozone.loading ? `Checking NASA. Showing dated ${ozone.snapshot ? 'saved ' : ''}observations in the meantime.` : ozone.error || (ozone.snapshot ? `Saved NASA observations, checked ${OZONE_SNAPSHOT.checkedAt}. Not a live ozone map.` : `NASA daily statistics${state.paused ? ' · Automatic checks paused' : ''}. Not a live ozone map.`);
-}
-function renderOzone() {
- const data = ozone.data;
- $('total').textContent = `${data.area.toFixed(2)}`;
- $('stat-one-label').textContent = 'OZONE HOLE / MILLION KM²';
- $('strongest').textContent = `${data.minimum} DU`;
- $('stat-two-label').textContent = 'SOUTHERN MINIMUM';
- $('ozone-area').textContent = data.area.toFixed(2);
- $('ozone-minimum').textContent = String(data.minimum);
- $('ozone-date').textContent = `OBSERVED / ${data.date} · NASA TOMS + OMI + OMPS`;
- const points = data.history;
- const svg = $('ozone-chart');svg.replaceChildren();
- if (points.length > 1) {
-  const maximum = Math.max(1, ...points.map(point => point.area));
-  const line = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-  line.setAttribute('points', points.map((point, index) => `${8 + index / (points.length - 1) * 284},${72 - point.area / maximum * 60}`).join(' '));
-  line.setAttribute('fill', 'none');line.setAttribute('stroke', '#ee9cdb');line.setAttribute('stroke-width', '2');svg.append(line);
-  svg.setAttribute('aria-label', points.map(point => `${point.date}: ${point.area} million square kilometers`).join(', '));
-  $('ozone-chart-range').textContent = `${points[0].date} — ${points.at(-1).date} · 0–${maximum.toFixed(1)} MILLION KM²`;
- }
- globe?.setOzone(data);updateOzoneStatus();
-}
-async function loadOzone(force = false) {
- if (ozone.loading || (!force && ozone.checked && Date.now() - ozone.checked < 3600000)) return;
- ozone.loading = true;ozone.checked = Date.now();updateStatus();
- const controller = new AbortController();const timeout = setTimeout(() => controller.abort(), 12000);
- try {
-  const texts = await Promise.all(ozoneURLs().map(async url => {
-   const response = await fetch(url, {signal: controller.signal});
-   if (!response.ok) throw new Error('NASA source unavailable');
-   return response.text();
-  }));
-  const next = mergeOzone(...texts);
-  if (next.date < ozone.data.date) throw new Error('NASA response predates retained observations');
-  ozone.data = next;ozone.snapshot = false;ozone.error = '';
- } catch {
-  ozone.error = `NASA direct refresh unavailable. Retaining ${ozone.snapshot ? 'saved ' : ''}observations dated ${ozone.data.date}; this is not current real-time data.`;
- } finally {
-  clearTimeout(timeout);ozone.loading = false;if (state.layer === 'ozone') renderOzone();
- }
-}
-$('ozone-focus').addEventListener('click', () => globe?.focusAntarctica());
-const loadActive = force => state.layer === 'ozone' ? loadOzone(force) : state.layer === 'seismic' ? loadSeismic(force) : loadWeather(force);
-function changeLayer(layer) {
- state.layer = layer;
- document.querySelectorAll('button[data-layer]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.layer === layer)));
- document.body.dataset.layer = layer;
- $('ozone-focus').hidden = layer !== 'ozone';
- $('ozone-settings-note').hidden = layer !== 'ozone';
- document.querySelector('.filter').hidden = layer === 'ozone';
- $('data-launch-label').textContent = layer === 'ozone' ? 'OZONE REPORT' : 'SEARCH';
- setDataView(document.querySelector('[data-view][aria-pressed=true]')?.dataset.view || 'locations');
- if (layer === 'ozone') {
-  $('layer-caption').textContent = 'ANTARCTIC OZONE / NASA DAILY';
-  $('sampling-note').textContent = 'EQUIVALENT-AREA CAP · SHELL HEIGHT EXAGGERATED · NOT A SATELLITE MAP';
-  $('legend').replaceChildren();
-  for (const [color, text] of [['#72c7ff', 'OZONE SHELL'], ['#f093d7', 'DEPLETED CAP / < 220 DU']]) {
-   const label = document.createElement('span');const dot = document.createElement('i');dot.style.background = color;label.append(dot, document.createTextNode(text));$('legend').append(label);
-  }
-  renderOzone();loadOzone(false);return;
- }
- const ranges = { temperature: [-30, 45, 1], precipitation: [0, 10, 0.1], seismic: [0, 5, 0.5] };
- const [min, max, step] = ranges[layer];
- $('magnitude').min = min;$('magnitude').max = max;$('magnitude').step = step;$('magnitude').value = state.filters[layer];
- $('filter-label').textContent = layer === 'temperature' ? 'MIN TEMPERATURE' : layer === 'precipitation' ? 'MIN PRECIPITATION' : 'MIN MAGNITUDE';
- $('layer-caption').textContent = layer === 'temperature' ? 'CURRENT AIR TEMPERATURE / °C' : layer === 'precipitation' ? 'CURRENT PRECIPITATION / MM PER INTERVAL' : 'SEISMIC ACTIVITY / PAST 24H';
- $('sampling-note').textContent = layer === 'seismic' ? 'SEPARATE GEOLOGICAL FEED · NOT A CLIMATE INDICATOR' : `${activeSites().length} LOCATION SAMPLES · ${layer === 'temperature' ? 'ABSOLUTE TEMPERATURE, NOT WARMING ANOMALY' : 'ACCUMULATED RAIN + SNOW / MODEL INTERVAL'}`;
- $('legend').replaceChildren();
- if (layer === 'temperature') {
-  const bar = document.createElement('span');bar.className = 'heat-scale';$('legend').append(bar);
-  for (const text of ['−10°', '10°', '25°', '40°C']) { const span = document.createElement('span');span.textContent = text;$('legend').append(span); }
- } else {
-  const labels = layer === 'precipitation' ? ['DRY', '0.1 MM', '1 MM', '5+ MM'] : ['M < 2.5', 'M 2.5–4.9', 'M 5+'];
-  labels.forEach((text, i) => {const span = document.createElement('span');const dot = document.createElement('i');dot.style.background = layer === 'precipitation' ? ['#435466', '#77bbda', '#45c4ff', '#b0eeff'][i] : ['#7ac5ff', '#ffb16c', '#ff5e69'][i];span.append(dot, document.createTextNode(text));$('legend').append(span);});
- }
- updateThreshold();render();loadActive(false);
-}
-function updateThreshold() {
- const value = state.filters[state.layer];
- $('threshold').textContent = value === (state.layer === 'temperature' ? -30 : 0) ? 'ALL' : `${value.toFixed(state.layer === 'temperature' ? 0 : 1)}${state.layer === 'temperature' ? '°C' : state.layer === 'precipitation' ? ' MM' : ' M'}+`;
-}
-$('magnitude').addEventListener('input', event => {state.filters[state.layer] = Number(event.target.value);updateThreshold();render();});
-document.querySelectorAll('button[data-layer]').forEach(button => button.addEventListener('click', () => changeLayer(button.dataset.layer)));
-$('refresh').addEventListener('click', () => loadActive(true));
-$('pause').addEventListener('click', () => {state.paused = !state.paused;$('pause').textContent = state.paused ? 'RESUME FEED' : 'PAUSE FEED';$('pause').setAttribute('aria-pressed', String(state.paused));updateStatus();if (!state.paused) loadActive(false);});
-setInterval(() => { if (!state.paused && !document.hidden) loadActive(false); }, 60000);
-document.addEventListener('visibilitychange', () => {if (!document.hidden && !state.paused) loadActive(false);});
-function showRotation(value) {rotating = value;$('rotate').setAttribute('aria-pressed', String(value));$('rotate').firstChild.textContent = value ? 'Ⅱ ' : '▷ ';}
-$('rotate').addEventListener('click', () => globe?.setRotation(!rotating));
-$('zoom-in').addEventListener('click', () => globe?.zoom(-1));
-$('zoom-out').addEventListener('click', () => globe?.zoom(1));
-$('reset').addEventListener('click', () => globe?.reset());
-// Native dialogs provide keyboard focus containment, Escape and focus restoration.
-function setDataView(view) {
- $('readings').scrollTop = 0;
- const isOzone = state.layer === 'ozone';
- $('ozone-panel').hidden = !isOzone;
- document.querySelector('.widget-tabs').hidden = isOzone;
- $('readings-title').textContent = isOzone ? 'OZONE LAYER / ANTARCTIC REPORT' : 'LIVE DATA';
- document.querySelector('.event-panel').hidden = isOzone || view !== 'locations';
- document.querySelector('.event-detail').hidden = isOzone || view !== 'details';
- document.querySelectorAll('[data-view]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.view === view)));
- document.querySelectorAll('[data-widget]').forEach(button => button.setAttribute('aria-expanded', String($('readings').open && button.dataset.widget === view)));
-}
-function openWidget(name) {
- const id = ['locations', 'details'].includes(name) ? 'readings' : name;
- const dialog = $(id);
- if (dialog.open && ['locations', 'details'].includes(name)) { setDataView(name);(state.layer === 'ozone' ? document.querySelector('[data-close=readings]') : document.querySelector(`[data-view="${name}"]`)).focus();return; }
- document.querySelectorAll('.widget-dialog[open]').forEach(open => open.close());
- if (['locations', 'details'].includes(name)) setDataView(name);
- dialog.showModal();
- dialog.scrollTop = 0;
- if (name === 'locations' && state.layer !== 'ozone') $('country-search').focus({preventScroll: true});
- document.querySelectorAll('[data-widget]').forEach(button => button.setAttribute('aria-expanded', String(button.dataset.widget === name)));
-}
-document.querySelectorAll('[data-widget]').forEach(button => button.addEventListener('click', () => openWidget(button.dataset.widget)));
-document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => setDataView(button.dataset.view)));
-document.querySelectorAll('[data-close]').forEach(button => button.addEventListener('click', () => $(button.dataset.close).close()));
-document.querySelectorAll('.widget-dialog').forEach(dialog => {
- let outsideDown = false;
- const outside = event => {const r = dialog.getBoundingClientRect();return event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom;};
- dialog.addEventListener('pointerdown', event => { outsideDown = outside(event); });
- dialog.addEventListener('click', event => {if (outsideDown && outside(event)) dialog.close();outsideDown = false;});
- dialog.addEventListener('close', () => {
-  document.querySelectorAll('[data-widget]').forEach(button => {if (button.getAttribute('aria-controls') === dialog.id) button.setAttribute('aria-expanded', 'false');});
- });
+$('speech').addEventListener('click',()=>{thoughtIndex++;});
+$('sound').addEventListener('click',async()=>{
+ try{const enabled=await sound.toggle();$('sound').setAttribute('aria-pressed',String(enabled));$('sound').innerHTML=enabled?'sound on <span aria-hidden="true">◉</span>':'sound off <span aria-hidden="true">◌</span>';}
+ catch{$('sound').textContent='sound unavailable';}
 });
-setDataView('locations');
-
-async function selectCountry(country, signal) {
- const site = {id: `country-${country.code}`, name: `${country.name} / reference point`, latitude: country.latitude, longitude: country.longitude};
- const controller = new AbortController();
- const abort = () => controller.abort();
- if (signal.aborted) throw new DOMException('Search canceled', 'AbortError');
- signal.addEventListener('abort', abort, {once: true});
- const timeout = setTimeout(abort, 20000);
- try {
-  // A country coordinate represents one model sample, not a national average.
-  const response = await fetch(weatherURL([site]), {signal: controller.signal});
-  if (!response.ok) throw new Error('Country weather unavailable');
-  const [item] = parseWeather(await response.json(), [site]);
-  if (!item) throw new Error('Country weather sample missing');
-  if (signal.aborted) throw new DOMException('Search canceled', 'AbortError');
-  extraSites.set(site.id, site);
-  state.weather.items = [...state.weather.items.filter(existing => existing.id !== site.id), item];
-  // Keep the timestamp of the multi-location feed: this sample has its own valid time.
-  if (!state.weather.updated) { state.weather.updated = Date.now();state.weather.error = 'Showing a searched reference point; the initial weather feed is unavailable.'; }
-  state.weather.selected = item.id;
-  if (!['temperature', 'precipitation'].includes(state.layer)) changeLayer('temperature');
-  state.filters[state.layer] = state.layer === 'temperature' ? -30 : 0;
-  $('magnitude').value = state.filters[state.layer];updateThreshold();render();
-  selectItem(item.id, true);
- } finally {
-  clearTimeout(timeout);signal.removeEventListener('abort', abort);
- }
+$('refresh').addEventListener('click',()=>refreshAll(true));
+$('info-open').addEventListener('click',()=>$('info').showModal());$('info-close').addEventListener('click',()=>$('info').close());
+$('info').addEventListener('click',event=>{const box=$('info').getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)$('info').close();});
+document.addEventListener('visibilitychange',()=>{sound.visibility(document.hidden).catch(()=>{});if(!document.hidden)refreshAll();});
+setInterval(()=>{if(!document.hidden)refreshAll();},60000);
+try{earth=createEarth($('globe'));}catch{
+ $('planet').classList.add('fallback');
+ $('globe').innerHTML='<svg viewBox="0 0 400 400" width="100%" height="100%"><circle cx="200" cy="200" r="148" fill="#246386"/><path d="M68 135L105 90 151 100 142 138 120 164 132 205 95 230 63 183M284 100L329 150 329 218 284 257 266 209 285 158Z" fill="#719377"/><ellipse cx="160" cy="174" rx="23" ry="32" fill="#fffdf1"/><ellipse cx="240" cy="174" rx="23" ry="32" fill="#fffdf1"/><ellipse cx="164" cy="179" rx="13" ry="21" fill="#352631"/><ellipse cx="236" cy="179" rx="13" ry="21" fill="#352631"/><ellipse cx="200" cy="255" rx="23" ry="29" fill="#352631"/></svg>';
 }
-initializeCountrySearch(selectCountry);
-async function initializeGlobe() {
- try {
-  const { createGlobe } = await import('./globe.js');
-  globe = createGlobe($('globe'), id => selectItem(id, true), showRotation);
-  $('globe-message').hidden = true;render();
- } catch (error) {
-  $('globe-message').hidden = false;$('globe-message').textContent = 'The 3D view needs WebGL and a local web server. Data remains available in the list.';
-  for (const id of ['rotate', 'zoom-in', 'zoom-out', 'reset']) $(id).disabled = true;
-  console.error('Unable to initialize Earth:', error);
- }
-}
-changeLayer('temperature');initializeGlobe();
+updateReadings();refreshAll();requestAnimationFrame(animate);

@@ -1,345 +1,114 @@
 import * as THREE from './vendor/three.module.js';
+import earthMap from './assets/earth.jpg';
 
-const RADIUS = 2;
-const colorFor = (mag) => mag >= 5 ? 0xff5e69 : mag >= 2.5 ? 0xffb16c : 0x7ac5ff;
-const HEAT_STOPS = [[-10, '#6783ff'], [0, '#6ed8ef'], [15, '#f7cf70'], [25, '#ff884a'], [40, '#f0444f']];
-const heatColor = temp => {
-  for (let i = 1; i < HEAT_STOPS.length; i++) {
-    if (temp <= HEAT_STOPS[i][0]) return new THREE.Color(HEAT_STOPS[i - 1][1]).lerp(new THREE.Color(HEAT_STOPS[i][1]), THREE.MathUtils.clamp((temp - HEAT_STOPS[i - 1][0]) / (HEAT_STOPS[i][0] - HEAT_STOPS[i - 1][0]), 0, 1));
-  }
-  return new THREE.Color(HEAT_STOPS.at(-1)[1]);
-};
-export function latLonVector(longitude, latitude, radius = RADIUS) {
-  const lon = THREE.MathUtils.degToRad(longitude);
-  const lat = THREE.MathUtils.degToRad(latitude);
-  return new THREE.Vector3(Math.cos(lat) * Math.cos(lon), Math.sin(lat), -Math.cos(lat) * Math.sin(lon)).multiplyScalar(radius);
-}
-
-export function createGlobe(container, onSelect, onRotationChange) {
-  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
-  camera.position.z = 6.9;
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'low-power' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.setClearColor(0x03070e, 0);
-  container.append(renderer.domElement);
-  const earth = new THREE.Group();
-  scene.add(earth);
-  earth.rotation.y = THREE.MathUtils.degToRad(160);
-  const target = new THREE.Quaternion();
-  const geometry = new THREE.SphereGeometry(RADIUS, 96, 64);
-  const material = new THREE.MeshPhongMaterial({ color: 0xb3c9df, shininess: 9, specular: 0x1c354d });
-  const surface = new THREE.Mesh(geometry, material);
-  earth.add(surface);
-  new THREE.TextureLoader().load('./assets/earth.jpg', (texture) => {
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
-    material.map = texture;
-    material.needsUpdate = true;
-  }, undefined, () => {
-    document.getElementById('globe-message').hidden = false;
-    document.getElementById('globe-message').textContent = 'Earth texture unavailable. Geographic sample positions are still accurate.';
-  });
-  scene.add(new THREE.AmbientLight(0x9bbce3, 1.3));
-  const sunlight = new THREE.DirectionalLight(0xc8e6ff, 2.8);
-  sunlight.position.set(-4, 3, 5);
-  scene.add(sunlight);
-  const rimLight = new THREE.DirectionalLight(0x285fbd, 2);
-  rimLight.position.set(4, -1, -3);
-  scene.add(rimLight);
-
-  // A thin atmospheric shell, brightest when viewed along the horizon.
-  const atmosphere = new THREE.Mesh(new THREE.SphereGeometry(RADIUS * 1.035, 64, 48), new THREE.ShaderMaterial({
-    vertexShader: 'varying vec3 vNormal; varying vec3 vView; void main(){ vec4 p=modelViewMatrix*vec4(position,1.0); vNormal=normalize(normalMatrix*normal); vView=normalize(-p.xyz); gl_Position=projectionMatrix*p; }',
-    fragmentShader: 'varying vec3 vNormal; varying vec3 vView; void main(){ float rim=pow(1.0-abs(dot(normalize(vNormal),normalize(vView))),3.5); gl_FragColor=vec4(0.17,0.49,0.92,rim*0.65); }',
-    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
-  }));
-  earth.add(atmosphere);
-
-  // An explanatory, vertically exaggerated ozone shell, not a measured ozone map.
-  const ozoneGroup = new THREE.Group();
-  ozoneGroup.visible = false;earth.add(ozoneGroup);
-  const ozoneUniforms = { capCos: {value: 0.94}, hasHole: {value: 1} };
-  const ozoneShell = new THREE.Mesh(new THREE.SphereGeometry(RADIUS * 1.055, 96, 64), new THREE.ShaderMaterial({
-    uniforms: ozoneUniforms,
-    vertexShader: 'varying vec3 vLocal; varying vec3 vNormal; varying vec3 vView; void main(){vLocal=normalize(position);vec4 p=modelViewMatrix*vec4(position,1.0);vNormal=normalize(normalMatrix*normal);vView=normalize(-p.xyz);gl_Position=projectionMatrix*p;}',
-    fragmentShader: 'uniform float capCos; uniform float hasHole; varying vec3 vLocal; varying vec3 vNormal; varying vec3 vView; void main(){float polar=-normalize(vLocal).y;float cap=smoothstep(capCos-0.008,capCos+0.008,polar)*hasHole;float rim=pow(1.0-abs(dot(normalize(vNormal),normalize(vView))),2.0);float edge=(1.0-smoothstep(0.0,0.013,abs(polar-capCos)))*hasHole;vec3 col=mix(vec3(0.28,0.71,1.0),vec3(0.87,0.27,0.69),cap);float alpha=mix(0.13+rim*0.42,0.08+rim*0.20,cap)+edge*0.6;gl_FragColor=vec4(col,alpha);}',
-    transparent: true, depthWrite: false,
-  }));
-  ozoneGroup.add(ozoneShell);
-  const ozoneBoundary = new THREE.LineLoop(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({color: 0xffa3e4, transparent: true, opacity: 0.9}));
-  ozoneGroup.add(ozoneBoundary);
-
-  // Subtle latitude / longitude lines sit on the geographic sphere.
-  const gridMaterial = new THREE.LineBasicMaterial({ color: 0x81b6dd, transparent: true, opacity: 0.075 });
-  for (let latitude = -60; latitude <= 60; latitude += 30) {
-    const positions = [];
-    for (let longitude = -180; longitude <= 180; longitude += 3) positions.push(latLonVector(longitude, latitude, RADIUS * 1.001));
-    earth.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(positions), gridMaterial));
-  }
-  for (let longitude = -180; longitude < 180; longitude += 30) {
-    const positions = [];
-    for (let latitude = -90; latitude <= 90; latitude += 3) positions.push(latLonVector(longitude, latitude, RADIUS * 1.001));
-    earth.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(positions), gridMaterial));
-  }
-  // Deterministic star positions keep the backdrop quiet and consistent.
-  const starPositions = [];
-  for (let i = 0; i < 650; i++) {
-    const x = Math.sin(i * 127.1 + 17) * 18;
-    const y = Math.sin(i * 311.7 + 53) * 12;
-    starPositions.push(x, y, -9 - (i % 11));
-  }
-  const stars = new THREE.BufferGeometry();
-  stars.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
-  scene.add(new THREE.Points(stars, new THREE.PointsMaterial({ color: 0x6c91b2, size: 0.018, transparent: true, opacity: 0.55, sizeAttenuation: true })));
-
-  // Local symbolic halos on a spherical texture; unsampled areas stay transparent.
-  const weatherCanvas = document.createElement('canvas');
-  weatherCanvas.width = 1024; weatherCanvas.height = 512;
-  const weatherContext = weatherCanvas.getContext('2d');
-  const weatherTexture = new THREE.CanvasTexture(weatherCanvas);
-  weatherTexture.colorSpace = THREE.SRGBColorSpace;
-  const weatherMaterial = new THREE.MeshBasicMaterial({ map: weatherTexture, transparent: true, opacity: 0, depthWrite: false });
-  const weatherShell = new THREE.Mesh(new THREE.SphereGeometry(RADIUS * 1.003, 96, 64), weatherMaterial);
-  earth.add(weatherShell);
-  let mode = 'temperature';
-  let weatherOpacity = 0;
-  function paintWeather(items, layer) {
-    weatherContext.clearRect(0, 0, 1024, 512);
-    weatherShell.visible = !['seismic', 'ozone'].includes(layer);
-    if (!weatherShell.visible) return;
-    for (const item of items) {
-      if (layer === 'precipitation' && item.precipitation <= 0) continue;
-      const color = layer === 'temperature' ? heatColor(item.temperature) : new THREE.Color(0x3bbdff);
-      const srgb = color.clone().convertLinearToSRGB();
-      const rgb = `${Math.round(srgb.r * 255)},${Math.round(srgb.g * 255)},${Math.round(srgb.b * 255)}`;
-      const strength = layer === 'temperature' ? 0.68 : Math.min(0.85, 0.25 + item.precipitation * 0.3);
-      const x = (item.longitude + 180) / 360 * 1024;
-      const y = (90 - item.latitude) / 180 * 512;
-      const ry = 10 / 180 * 512;
-      const rx = ry / Math.max(0.3, Math.cos(THREE.MathUtils.degToRad(item.latitude)));
-      for (const wrap of [-1024, 0, 1024]) {
-        weatherContext.save();weatherContext.translate(x + wrap, y);weatherContext.scale(rx, ry);
-        const gradient = weatherContext.createRadialGradient(0, 0, 0, 0, 0, 1);
-        gradient.addColorStop(0, `rgba(${rgb},${strength})`);
-        gradient.addColorStop(0.35, `rgba(${rgb},${strength * 0.7})`);
-        gradient.addColorStop(1, `rgba(${rgb},0)`);
-        weatherContext.fillStyle = gradient;weatherContext.fillRect(-1, -1, 2, 2);weatherContext.restore();
-      }
-    }
-    weatherTexture.needsUpdate = true;
-    weatherOpacity = 0;
-  }
-
-  const markers = new THREE.Group();
-  earth.add(markers);
-  const dotGeometry = new THREE.SphereGeometry(1, 10, 8);
-  const ringGeometry = new THREE.RingGeometry(0.82, 1, 48);
-  let selected = null;
-  let entries = [];
-  let autoRotate = !reducedMotion;
-  let drag = null;
-  let focused = false;
-  let lastTime = 0;
-  let animation;
-  let zoomTarget = camera.position.z;
-  let baseDistance = camera.position.z;
-  const axisY = new THREE.Vector3(0, 1, 0);
-  const axisX = new THREE.Vector3(1, 0, 0);
-  const rotation = new THREE.Quaternion();
-  const world = new THREE.Vector3();
-
-  function setRotation(value) {
-    autoRotate = value;
-    onRotationChange(value);
-  }
-  function setData(items, layer) {
-    mode = layer;
-    ozoneGroup.visible = false;
-    paintWeather(items, layer);
-    for (const entry of entries) {
-      entry.dot.material.dispose();entry.ring.material.dispose();entry.halo.material.dispose();
-      if (entry.rain) { entry.rain.geometry.dispose();entry.rain.material.dispose(); }
-    }
-    markers.clear();
-    entries = items.map((item, index) => {
-      const group = new THREE.Group();
-      const normal = latLonVector(item.longitude, item.latitude).normalize();
-      group.position.copy(normal).multiplyScalar(RADIUS * 1.006);
-      group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
-      const color = layer === 'seismic' ? colorFor(item.mag) : layer === 'temperature' ? heatColor(item.temperature) : item.precipitation > 0 ? 0x78d8ff : 0x435466;
-      const size = layer === 'seismic' ? 0.011 + Math.max(0, item.mag) * 0.003 : layer === 'temperature' ? 0.019 : 0.014 + Math.min(item.precipitation, 5) * 0.004;
-      const dot = new THREE.Mesh(dotGeometry, new THREE.MeshBasicMaterial({ color }));
-      dot.scale.setScalar(size);dot.userData.id = item.id;
-      const ring = new THREE.Mesh(ringGeometry, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
-      ring.position.z = 0.009;
-      const halo = new THREE.Mesh(ringGeometry, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }));
-      halo.position.z = 0.006;halo.scale.setScalar(size * 3.5);
-      group.add(dot, ring, halo);
-      let rain = null;
-      let drops = 0;
-      if (layer === 'precipitation' && item.precipitation > 0) {
-        // Falling strokes are a symbol; amount controls density, not storm extent.
-        drops = Math.min(24, 3 + Math.ceil(item.precipitation / item.interval * 3600 * 3));
-        const rainGeometry = new THREE.BufferGeometry();
-        rainGeometry.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(drops * 6), 3));
-        rain = new THREE.LineSegments(rainGeometry, new THREE.LineBasicMaterial({color: 0x9ce7ff, transparent: true, opacity: 0.75}));
-        group.add(rain);
-      }
-      markers.add(group);
-      return { ...item, dot, ring, halo, group, rain, drops, size, phase: index * 0.618 % 1 };
-    });
-  }
-  function setEvents(events) {
-    setData(events.map(event => ({ id: event.id, longitude: event.geometry.coordinates[0], latitude: event.geometry.coordinates[1], mag: event.properties.mag })), 'seismic');
-  }
-  function setWeather(samples, layer) { setData(samples, layer); }
-  function focusAntarctica() {
-    target.setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
-    focused = true;setRotation(false);
-  }
-  function setOzone(data) {
-    const entering = mode !== 'ozone';
-    setData([], 'ozone');
-    ozoneGroup.visible = true;
-    // Spherical-cap area A = 2πR²(1 − cos θ), using Earth's mean radius.
-    const cosine = THREE.MathUtils.clamp(1 - data.area * 1e6 / (2 * Math.PI * 6371 * 6371), -1, 1);
-    ozoneUniforms.capCos.value = cosine;
-    ozoneUniforms.hasHole.value = data.area > 0 ? 1 : 0;
-    ozoneBoundary.visible = data.area > 0;
-    const latitude = -90 + THREE.MathUtils.radToDeg(Math.acos(cosine));
-    const positions = [];
-    for (let longitude = -180; longitude < 180; longitude += 2) positions.push(latLonVector(longitude, latitude, RADIUS * 1.057));
-    ozoneBoundary.geometry.dispose();
-    ozoneBoundary.geometry = new THREE.BufferGeometry().setFromPoints(positions);
-    if (entering) focusAntarctica();
-  }
-  function select(id, focus) {
-    selected = id;
-    if (focus) {
-      const entry = entries.find((item) => item.id === id);
-      if (!entry) return;
-      const lon = entry.longitude; const lat = entry.latitude;
-      target.setFromEuler(new THREE.Euler(THREE.MathUtils.degToRad(lat), -Math.PI / 2 - THREE.MathUtils.degToRad(lon), 0, 'XYZ'));
-      focused = true;
-      setRotation(false);
-    }
-  }
-  function resize() {
-    const { width, height } = container.getBoundingClientRect();
-    if (!width || !height) return;
-    renderer.setSize(width, height, false);
-    camera.aspect = width / height;
-    // Fit the globe within its own stage, with a clear margin on every side.
-    camera.fov = 42;
-    camera.clearViewOffset();
-    baseDistance = RADIUS / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.min(camera.aspect, 1) * 1.1;
-    camera.position.z = baseDistance;
-    zoomTarget = baseDistance;
-    camera.updateProjectionMatrix();
-  }
-  const resizeObserver = new ResizeObserver(resize);
-  resizeObserver.observe(container);
-  function zoom(direction) { zoomTarget = THREE.MathUtils.clamp(zoomTarget + direction * 0.65, 5.1, 13); }
-  renderer.domElement.addEventListener('wheel', (event) => {
-    event.preventDefault();
-    zoom(Math.sign(event.deltaY));
-  }, { passive: false });
-  renderer.domElement.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || drag) return;
-    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, moved: false };
-    renderer.domElement.setPointerCapture(event.pointerId);
-  });
-  renderer.domElement.addEventListener('pointermove', (event) => {
-    if (!drag || drag.id !== event.pointerId) return;
-    const dx = event.clientX - drag.x;
-    const dy = event.clientY - drag.y;
-    if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 4) drag.moved = true;
-    if (drag.moved) {
-      focused = false;
-      setRotation(false);
-      earth.quaternion.premultiply(rotation.setFromAxisAngle(axisY, dx * 0.004));
-      earth.quaternion.premultiply(rotation.setFromAxisAngle(axisX, dy * 0.004));
-    }
-    drag.x = event.clientX;
-    drag.y = event.clientY;
-  });
-  renderer.domElement.addEventListener('pointerup', (event) => {
-    if (!drag || drag.id !== event.pointerId) return;
-    const clicked = !drag.moved;
-    drag = null;
-    if (!clicked) return;
-    const rect = renderer.domElement.getBoundingClientRect();
-    // Compare projected locations for forgiving hit targets, and reject the far side.
-    let nearest = null;
-    let distance = 22;
-    earth.updateMatrixWorld(true);
-    for (const entry of entries) {
-      entry.dot.getWorldPosition(world);
-      if (world.dot(camera.position.clone().sub(world)) <= 0) continue;
-      const projected = world.clone().project(camera);
-      const x = (projected.x + 1) / 2 * rect.width;
-      const y = (1 - projected.y) / 2 * rect.height;
-      const delta = Math.hypot(x - (event.clientX - rect.left), y - (event.clientY - rect.top));
-      if (delta < distance) { distance = delta; nearest = entry; }
-    }
-    if (mode === 'ozone') {
-      const ray = new THREE.Raycaster();
-      ray.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1), camera);
-      if (ray.intersectObject(surface).length) onSelect('ozone');
-    } else if (nearest) onSelect(nearest.id);
-  });
-  function cancelDrag() { drag = null; }
-  renderer.domElement.addEventListener('pointercancel', cancelDrag);
-  renderer.domElement.addEventListener('lostpointercapture', cancelDrag);
-  renderer.domElement.addEventListener('webglcontextlost', (event) => {
-    event.preventDefault();
-    cancelAnimationFrame(animation);
-    const message = document.getElementById('globe-message');
-    message.hidden = false;
-    message.textContent = 'The 3D view was interrupted. Reload to restore it; event records remain available below.';
-  });
-  function frame(time) {
-    animation = requestAnimationFrame(frame);
-    const delta = Math.min(time - lastTime, 50);
-    lastTime = time;
-    if (document.hidden) return;
-    if (focused) {
-      if (reducedMotion) earth.quaternion.copy(target);
-      else earth.quaternion.slerp(target, 1 - Math.exp(-delta * 0.004));
-      if (earth.quaternion.angleTo(target) < 0.001) focused = false;
-    } else if (autoRotate && !drag) earth.quaternion.premultiply(rotation.setFromAxisAngle(axisY, delta * 0.000025));
-    camera.position.z = THREE.MathUtils.lerp(camera.position.z, zoomTarget, reducedMotion ? 1 : 0.12);
-    weatherOpacity = THREE.MathUtils.lerp(weatherOpacity, 0.95, reducedMotion ? 1 : 0.06);
-    weatherMaterial.opacity = weatherOpacity;
-    for (const entry of entries) {
-      const isSelected = entry.id === selected;
-      const progress = reducedMotion ? 0.35 : (time * 0.00028 + entry.phase) % 1;
-      entry.ring.scale.setScalar(entry.size * (2 + progress * (isSelected ? 12 : 7)));
-      entry.ring.material.opacity = mode === 'temperature' ? (isSelected ? 0.65 : 0.16) : mode === 'precipitation' && entry.precipitation === 0 ? 0 : (1 - progress) * (isSelected ? 0.9 : 0.55);
-      entry.dot.scale.setScalar(entry.size * (isSelected ? 1.8 : 1));
-      entry.halo.material.opacity = isSelected ? 0.65 : 0.16;
-      if (entry.rain) {
-        const positions = entry.rain.geometry.attributes.position;
-        for (let i = 0; i < entry.drops; i++) {
-          const x = Math.sin(i * 127.1 + entry.phase) * 0.085;
-          const y = Math.cos(i * 311.7 + entry.phase) * 0.085;
-          const height = 0.02 + (reducedMotion ? (i * 0.318 % 1) : (1 - (time * 0.00045 + i * 0.318 + entry.phase) % 1)) * 0.23;
-          positions.setXYZ(i * 2, x, y, height);
-          positions.setXYZ(i * 2 + 1, x, y, height + 0.027);
-        }
-        positions.needsUpdate = true;
-      }
-    }
-    renderer.render(scene, camera);
-  }
-  resize();
-  onRotationChange(autoRotate);
-  animation = requestAnimationFrame(frame);
-  return {
-    setEvents, setWeather, setOzone, focusAntarctica, select, zoom, setRotation,
-    reset() { if (mode === 'ozone') { focusAntarctica();zoomTarget = baseDistance;return; } target.identity(); focused = true; zoomTarget = baseDistance; setRotation(!reducedMotion); },
-  };
+// A single blue globe with expressions on its curved surface.
+export function createEarth(container) {
+ const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true,powerPreference:'low-power'});
+ renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(0x000000,0);renderer.outputColorSpace=THREE.SRGBColorSpace;
+ container.replaceChildren(renderer.domElement);
+ const scene=new THREE.Scene(),camera=new THREE.OrthographicCamera(-1.35,1.35,1.35,-1.35,.1,20);
+ camera.position.z=6;
+ scene.add(new THREE.HemisphereLight(0xffffff,0x36546a,2));
+ const key=new THREE.DirectionalLight(0xfff5e7,2.1);key.position.set(-3,4,5);scene.add(key);
+ const globe=new THREE.Group();scene.add(globe);
+ const ink=new THREE.MeshStandardMaterial({color:'#26202c',roughness:.85});
+ const eyeWhite=new THREE.MeshStandardMaterial({color:'#fffdf2',roughness:.5});
+ const iris=new THREE.MeshStandardMaterial({color:'#352631',roughness:.4});
+ const sphere=new THREE.SphereGeometry(1,72,48);
+ function ball(parent,x,y,z,sx,sy,sz,material){const mesh=new THREE.Mesh(sphere,material);mesh.position.set(x,y,z);mesh.scale.set(sx,sy,sz);parent.add(mesh);return mesh;}
+ function surface(x,y,extra=.012){return Math.sqrt(Math.max(.015,1-x*x-y*y))+extra;}
+ function line(parent,points,material,r=.016){const curve=new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p)));const mesh=new THREE.Mesh(new THREE.TubeGeometry(curve,32,r,8,false),material);parent.add(mesh);return mesh;}
+ const texture=new THREE.TextureLoader().load(earthMap);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
+ const uniforms={map:{value:texture}};
+ const earthMaterial=new THREE.ShaderMaterial({uniforms,
+  vertexShader:'varying vec2 vUv;varying vec3 vN;varying vec3 vP;void main(){vUv=uv;vP=position;vN=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+  fragmentShader:`uniform sampler2D map;varying vec2 vUv;varying vec3 vN;varying vec3 vP;void main(){
+   vec3 land=texture2D(map,vUv).rgb;float front=smoothstep(.45,.8,vP.z);
+   float face=(1.-smoothstep(.62,1.,length(vec2(vP.x/.66,(vP.y+.01)/.67))))*front;
+   vec3 ocean=vec3(.055,.17,.30);land=mix(land*1.28,ocean,face*.90);
+   float light=.66+.34*max(0.,dot(normalize(vN),normalize(vec3(-.4,.6,1.))));
+   gl_FragColor=vec4(land*light,1.);
+   #include <colorspace_fragment>
+  }`});
+ const headGeometry=new THREE.SphereGeometry(1,192,128),headPositions=headGeometry.attributes.position;
+ for(let i=0;i<headPositions.count;i++){
+  const x=headPositions.getX(i),y=headPositions.getY(i),z=headPositions.getZ(i);if(z<.75)continue;
+  const tip=.065*Math.exp(-((x/.075)**2)-(((y+.085)/.07)**2));
+  const bridge=.022*Math.exp(-((x/.036)**2)-(((y-.005)/.10)**2));
+  headPositions.setZ(i,z+tip+bridge);
+ }
+ headGeometry.computeVertexNormals();globe.add(new THREE.Mesh(headGeometry,earthMaterial));
+ const warmth={heat:{value:0}};
+ const atmosphereMaterial=new THREE.ShaderMaterial({uniforms:warmth,transparent:true,depthWrite:false,
+  vertexShader:'varying vec3 vN;void main(){vN=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+  fragmentShader:`uniform float heat;varying vec3 vN;void main(){
+   vec3 colour=heat<.5?mix(vec3(1.,.82,.23),vec3(1.,.43,.14),heat*2.):mix(vec3(1.,.43,.14),vec3(1.,.15,.12),(heat-.5)*2.);
+   float rim=pow(1.-abs(normalize(vN).z),1.9);float alpha=heat*(.035+.64*rim);gl_FragColor=vec4(colour,alpha);
+  }`});
+ const atmosphere=ball(globe,0,0,0,1.045,1.045,1.045,atmosphereMaterial);atmosphere.renderOrder=1;
+ const skin=new THREE.MeshStandardMaterial({color:'#24547b',roughness:.95});
+ for(const side of [-1,1]){
+  ball(globe,side*1.005,-.02,0,.10,.15,.075,skin);
+  line(globe,[[side*1.018,.04,.072],[side*1.045,-.025,.077],[side*1.02,-.075,.071]],ink,.008);
+ }
+ const eyes=[],brows=[];
+ for(const x of [-.30,.30]){
+  const group=new THREE.Group();group.position.set(x,.16,surface(x,.16,.008));group.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),new THREE.Vector3(x,.16,surface(x,.16,0)).normalize());globe.add(group);
+  const eye=new THREE.Group();group.add(eye);
+  ball(eye,0,0,0,.137,.181,.055,eyeWhite);
+  const pupil=ball(eye,x>0?-.012:.012,-.012,.053,.083,.120,.022,iris);
+  ball(eye,-.027,.055,.077,.027,.035,.008,eyeWhite);ball(eye,.025,-.030,.078,.011,.014,.006,eyeWhite);
+  eyes.push({eye,pupil});
+  const brow=new THREE.Group();brow.position.set(x,.41,surface(x,.41,.017));globe.add(brow);
+  line(brow,[[-.105,-.025,0],[0,.025,.014],[.105,-.025,0]],ink,.024);brows.push(brow);
+ }
+ // A curved mouth patch and a shallow lip rim share the same expression controls.
+ const mouthCanvas=document.createElement('canvas');mouthCanvas.width=512;mouthCanvas.height=640;const c=mouthCanvas.getContext('2d');
+ c.beginPath();c.ellipse(256,320,246,309,0,0,Math.PI*2);const cavity=c.createRadialGradient(256,370,20,256,320,320);cavity.addColorStop(0,'#482631');cavity.addColorStop(1,'#180e19');c.fillStyle=cavity;c.fill();c.save();c.clip();
+ c.fillStyle='#fff5dc';c.beginPath();c.moveTo(10,56);c.quadraticCurveTo(256,112,502,56);c.lineTo(502,124);c.quadraticCurveTo(256,183,10,124);c.closePath();c.fill();
+ const tongue=c.createLinearGradient(0,490,0,640);tongue.addColorStop(0,'#ec909c');tongue.addColorStop(1,'#b86579');c.fillStyle=tongue;c.beginPath();c.ellipse(256,594,176,106,0,0,Math.PI*2);c.fill();c.restore();
+ const mouthTexture=new THREE.CanvasTexture(mouthCanvas);mouthTexture.colorSpace=THREE.SRGBColorSpace;
+ const expression={scale:{value:new THREE.Vector2(1,1)},map:{value:mouthTexture}};
+ const mouth=new THREE.Mesh(new THREE.PlaneGeometry(2,2,40,40),new THREE.ShaderMaterial({uniforms:expression,transparent:true,depthWrite:false,
+  vertexShader:'uniform vec2 scale;varying vec2 vUv;void main(){vUv=uv;vec2 p=position.xy*vec2(.17,.195)*scale+vec2(0.,-.35);float z=sqrt(max(.015,1.-dot(p,p)))+.015;gl_Position=projectionMatrix*modelViewMatrix*vec4(p,z,1.);}',
+  fragmentShader:'uniform sampler2D map;varying vec2 vUv;void main(){vec4 c=texture2D(map,vUv);if(c.a<.01)discard;gl_FragColor=c;}'
+ }));globe.add(mouth);
+ const lips=new THREE.Mesh(new THREE.RingGeometry(.91,1.035,80),new THREE.ShaderMaterial({uniforms:{scale:expression.scale},transparent:true,
+  vertexShader:'uniform vec2 scale;varying float rim;void main(){rim=length(position.xy);vec2 p=position.xy*vec2(.17,.195)*scale+vec2(0.,-.35);float z=sqrt(max(.015,1.-dot(p,p)))+.018+sin((rim-.91)/.125*3.14159)*.008;gl_Position=projectionMatrix*modelViewMatrix*vec4(p,z,1.);}',
+  fragmentShader:'varying float rim;void main(){gl_FragColor=vec4(.21,.22,.31,.84);}'
+ }));globe.add(lips);
+ const quietMaterial=ink.clone();quietMaterial.transparent=true;
+ const quiet=line(globe,[[-.115,-.32,surface(-.115,-.32)],[0,-.28,surface(0,-.28)],[.115,-.32,surface(.115,-.32)]],quietMaterial,.012);
+ // Unbroken water follows the cheeks; its edges and end dissolve softly.
+ const water={time:{value:0},strength:{value:0}};
+ const waterMaterial=new THREE.ShaderMaterial({uniforms:water,transparent:true,depthWrite:false,side:THREE.DoubleSide,
+  vertexShader:'uniform float strength;varying vec2 vUv;void main(){vUv=uv;float side=position.z;float p=uv.y;float centre=side*(.30+.035*(1.-p));float x=centre+(uv.x-.5)*(.018+strength*.067);float y=(-.014+strength*.030)-(1.-p)*(.64+strength*.31);float z=sqrt(max(.015,1.-x*x-y*y))+.020;gl_Position=projectionMatrix*modelViewMatrix*vec4(x,y,z,1.);}',
+  fragmentShader:`uniform float time;uniform float strength;varying vec2 vUv;void main(){float edge=smoothstep(0.,.18,vUv.x)*smoothstep(0.,.18,1.-vUv.x);float end=smoothstep(0.,.13,vUv.y);float flow=.5+.5*sin(vUv.y*30.+time*.007);vec3 colour=mix(vec3(.20,.66,.87),vec3(.72,.92,1.),.24+flow*.14);gl_FragColor=vec4(colour,edge*end*(.36+strength*.43));}`
+ });
+ const streams=[];
+ for(const side of [-1,1]){const geometry=new THREE.PlaneGeometry(1,1,4,48);const p=geometry.attributes.position;for(let i=0;i<p.count;i++)p.setZ(i,side);const stream=new THREE.Mesh(geometry,waterMaterial);stream.frustumCulled=false;stream.renderOrder=3;globe.add(stream);streams.push(stream);}
+ // Small pools under the eyelids make the first tear stage feel wet rather than mechanical.
+ const poolMaterial=new THREE.MeshStandardMaterial({color:'#78cce8',roughness:.2,transparent:true,opacity:.65});
+ const pools=[-.30,.30].map(x=>ball(globe,x,-.008,surface(x,-.008,.035),.09,.018,.018,poolMaterial));
+ let yaw=0,dragging=false,lastX=0,lastInteraction=-Infinity,width=0,height=0,lastTime=0,tears=0,open=0;
+ container.style.touchAction='none';
+ container.addEventListener('pointerdown',event=>{if(event.button!==0)return;dragging=true;lastX=event.clientX;container.setPointerCapture(event.pointerId);container.classList.add('dragging');});
+ container.addEventListener('pointermove',event=>{if(!dragging)return;yaw=THREE.MathUtils.clamp(yaw+(event.clientX-lastX)*.004,-.35,.35);lastX=event.clientX;lastInteraction=performance.now();});
+ const end=()=>{dragging=false;container.classList.remove('dragging');};['pointerup','pointercancel','lostpointercapture'].forEach(event=>container.addEventListener(event,end));
+ const reset=()=>{yaw=0;lastInteraction=performance.now();};container.addEventListener('dblclick',reset);
+ container.parentElement.addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight','Home'].includes(event.key))return;event.preventDefault();if(event.key==='Home')reset();else{if(event.key==='ArrowLeft')yaw=Math.max(-.35,yaw-.10);if(event.key==='ArrowRight')yaw=Math.min(.35,yaw+.10);lastInteraction=performance.now();}});
+ new ResizeObserver(()=>{width=container.clientWidth;height=container.clientHeight;if(!height)return;renderer.setSize(width,height,false);const aspect=width/height,h=Math.max(1.17,1.18/aspect);camera.left=-h*aspect;camera.right=h*aspect;camera.top=h;camera.bottom=-h;camera.updateProjectionMatrix();}).observe(container);
+ return {draw(r,time,reduced){
+  const dt=Math.min(80,Math.max(16,time-lastTime));lastTime=time;const ease=reduced?1:1-Math.exp(-dt*.005);
+  tears+=(r.tears-tears)*ease;open+=((r.scream||r.tears>.66?1:0)-open)*ease;warmth.heat.value=r.heat;
+  const shake=r.shake<=0?0:r.shake>.66?1:r.shake>.28?.55:.22;const active=shake>0&&(time%6500)<1600+shake*3500;
+  const wave=active&&!reduced&&!dragging&&time-lastInteraction>1400?Math.sin(time*(.012+shake*.037))*shake:0;
+  globe.rotation.set(0,THREE.MathUtils.clamp(yaw+wave*.25,-.50,.50),wave*.035);
+  const blinkPhase=time%5800,blink=!reduced&&blinkPhase<180?Math.sin(blinkPhase/180*Math.PI)**2:0;eyes.forEach(({eye,pupil},i)=>{eye.scale.y=(1-tears*.20)*(1-blink*.9);pupil.position.y=-.012-tears*.012;pupil.position.x=(i?-.012:.012)+(reduced?0:Math.sin(time*.00045)*.004);});
+  brows.forEach((b,i)=>{b.rotation.z=(i?-1:1)*(tears*.30+r.heat*.10);b.position.y=.40+open*.025;});
+  mouth.visible=lips.visible=open>.05;quietMaterial.opacity=1-open;
+  expression.scale.value.set(.85+tears*.25,.05+open*(.90+tears*.18)+(reduced?0:Math.sin(time*.012)*open*.018));
+  water.time.value=reduced?0:time;water.strength.value=tears;streams.forEach(stream=>{stream.visible=tears>.28;});pools.forEach(pool=>{pool.visible=tears>.04;pool.position.y=-.014+tears*.030;pool.position.z=surface(pool.position.x,pool.position.y,.035);pool.scale.y=.010+tears*.013;});
+  if(width&&height)renderer.render(scene,camera);
+ }};
 }
