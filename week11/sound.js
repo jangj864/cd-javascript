@@ -1,14 +1,21 @@
 // Small synthesized vocal / rattle / water gestures. No sound before a user click.
 export class EarthSound {
  constructor(){this.enabled=false;this.context=null;this.last={heat:-Infinity,shake:-Infinity,tears:-Infinity};}
- async toggle(){
-  if(this.enabled){this.enabled=false;this.master.gain.cancelScheduledValues(this.context.currentTime);this.master.gain.setTargetAtTime(0,this.context.currentTime,0.015);return false;}
+ async prepare(){
   const Audio=window.AudioContext||window.webkitAudioContext;
   if(!Audio)throw new Error('Audio unavailable');
   if(!this.context){this.context=new Audio();this.master=this.context.createGain();this.master.gain.value=0;this.master.connect(this.context.destination);}
   await this.context.resume();
+ }
+ async toggle(){
+  if(this.enabled){this.enabled=false;this.master.gain.cancelScheduledValues(this.context.currentTime);this.master.gain.setTargetAtTime(0,this.context.currentTime,0.015);return false;}
+  await this.prepare();
   this.enabled=true;this.master.gain.cancelScheduledValues(this.context.currentTime);this.master.gain.setTargetAtTime(0.09,this.context.currentTime,0.03);
   this.last={heat:-Infinity,shake:-Infinity,tears:-Infinity};return true;
+ }
+ async cry(intensity=1){
+  if(!this.enabled)await this.toggle();else await this.context.resume();
+  this.scream(Math.max(.5,intensity));this.last.heat=performance.now();
  }
  tick(reaction,time){
   if(!this.enabled||document.hidden||this.context.state!=='running')return;

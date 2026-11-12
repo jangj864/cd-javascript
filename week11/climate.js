@@ -1,3 +1,4 @@
+import {getAirMood} from './air-data.js';
 export const TEMP_URL = 'https://data.giss.nasa.gov/gistemp/tabledata_v4/GLB.Ts+dSST.csv';
 export const SEA_URL = 'https://science.nasa.gov/earth/explore/earth-indicators/sea-leve/';
 export const QUAKE_URL = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson';
@@ -63,9 +64,12 @@ export function parseQuakes(payload,now=Date.now()) {
  return {current,previous,time:payload.metadata.generated};
 }
 export function getReaction(data) {
- const heat=Math.max(0,Math.min(1,(data.temperature?.value||0)/1.5));
+ const temperature=Number.isFinite(data.temperature?.value)?data.temperature.value:0;
+ const heat=Math.max(0,Math.min(1,temperature/1.5));
+ const cold=Math.max(0,Math.min(1,-temperature/1.5));
  const shake=data.quakes&&data.quakes.current>data.quakes.previous?Math.min(1,(data.quakes.current-data.quakes.previous)/Math.max(1,data.quakes.previous)):0;
  const rain=data.rain?Math.min(1,data.rain.value/0.5):0;
  const sea=data.sea?Math.min(1,data.sea.value/200):0;
- return {heat,shake,tears:Math.min(1,rain*0.75+sea*0.45),scream:heat>2/3};
+ const air=getAirMood(data.air?.aqi).intensity;
+ return {heat,cold,shake,air,tears:Math.min(1,rain*0.75+sea*0.45),scream:heat>2/3};
 }
