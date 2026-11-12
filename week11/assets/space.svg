@@ -7,10 +7,10 @@
     <path d="M65 730C190 372 472 184 845 151S1448 303 1534 558" stroke-dasharray="5 15"/>
     <path d="M124 806C400 1006 1238 843 1472 379" stroke-dasharray="3 15"/>
   </g>
-  <g stroke="#e2d7ac" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" opacity=".8">
-    <path d="m165 157 4 13 13 4-13 4-4 13-4-13-13-4 13-4Z" fill="#e2d7ac"/>
+  <g fill="#e2d7ac" opacity=".8">
+    <path d="m165 157 4 13 13 4-13 4-4 13-4-13-13-4 13-4Z"/>
     <path d="m1408 239 3 11 11 3-11 3-3 11-3-11-11-3 11-3Z"/>
-    <path d="m1243 651 4 16 16 4-16 4-4 16-4-16-16-4 16-4Z" fill="#e2d7ac"/>
+    <path d="m1243 651 4 16 16 4-16 4-4 16-4-16-16-4 16-4Z"/>
     <path d="m318 719 2 9 9 2-9 2-2 9-2-9-9-2 9-2Z"/>
     <path d="m1112 101 2 8 8 2-8 2-2 8-2-8-8-2 8-2Z"/>
   </g>

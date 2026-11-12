@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {createAirPanel} from '../air.js';
 import {DEFAULT_CITY,getAirMood,parseFavorites,cityKey,FAVORITES_LIMIT,fetchAirQuality,searchCities} from '../air-data.js';
 import {getReaction} from '../climate.js';
 
 const seoul={name:'Seoul',country:'South Korea',latitude:37.566,longitude:126.9784};
+const pageIds=new Set([...readFileSync(new URL('../index.html',import.meta.url),'utf8').matchAll(/\bid="([^"]+)"/g)].map(match=>match[1]));
 function payload(aqi=125,time=Date.now()) {
  return {latitude:37.5,longitude:127,current_units:{time:'unixtime',us_aqi:'USAQI',pm2_5:'μg/m³'},current:{time:Math.floor(time/1000),us_aqi:aqi,pm2_5:24.6}};
 }
@@ -61,7 +63,7 @@ class Element {
 function setup(t,storage=new Map()) {
  const originals=Object.fromEntries(['document','localStorage','fetch'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
  const nodes=new Map();
- const $=id=>{if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);};
+ const $=id=>{assert(pageIds.has(id),`Missing page element: ${id}`);if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);};
  globalThis.document={getElementById:$,createElement:()=>new Element()};
  globalThis.localStorage={getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value)};
  t.after(()=>{for(const [key,descriptor] of Object.entries(originals)){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete globalThis[key];}});
@@ -80,16 +82,16 @@ test('city search, saving, selecting, reload restoration and removing use curren
  $('air-open').events.click();
  assert.equal($('place-tools').open,true);assert.equal($('city-query').focused,true);
  await panel.refresh();
- assert.equal(reading.city.name,'New York');assert.equal($('air-response-state').textContent,'HTTP 200');
- assert.deepEqual(JSON.parse($('air-response-json').textContent).current,payload(50).current);
- assert.equal($('air-mood').textContent,'Comfortable');
+ assert.equal(reading.city.name,'New York');assert.equal($('air-aqi').textContent,'50');
+ assert($('air-time').textContent.startsWith('Model valid '));
+ assert.equal($('air-effect').textContent,'Clearer air gives my eyes a little rest.');
  $('city-query').value='Seoul';$('city-query').events.input();
  await $('city-form').events.submit({preventDefault(){}});
  $('city-results').children[0].children[0].events.click();await settle();
- assert.equal($('place-tools').open,false);assert.equal($('api-inspector').open,false);
+ assert.equal($('place-tools').open,false);
  assert.equal($('air-panel').dataset.mode,'city');assert.equal($('air-status').hidden,true);
- assert.equal(reading.city.name,'Seoul');assert.equal($('air-mood').textContent,'Tired');
- assert.equal($('air-rule').textContent,'100 < AQI ≤ 150');assert.equal($('air-meter').value,.5);
+ assert.equal(reading.city.name,'Seoul');assert.equal($('air-effect').textContent,'This air is making my eyes droop.');
+ assert.equal(getReaction({air:reading}).air,.5);assert.equal($('air-effect').hidden,false);
  $('favorite-toggle').events.click();
  assert.equal(JSON.parse(storage.get('earth-favorite-cities'))[0].name,'Seoul');
  assert.equal($('favorite-toggle').attrs['aria-pressed'],'true');
@@ -103,19 +105,19 @@ test('city search, saving, selecting, reload restoration and removing use curren
  assert.deepEqual(JSON.parse(storage.get('earth-favorite-cities')),[]);assert.equal($('favorite-toggle').focused,true);
 });
 
-test('outdated responses cannot replace newer readings; failed requests clear their trace',async t=>{
+test('outdated responses cannot replace newer readings; failures clear the previous expression',async t=>{
  const {$}=setup(t);let reading;
  let releaseOld;
  globalThis.fetch=()=>new Promise(resolve=>releaseOld=resolve);
  const panel=createAirPanel({onChange:value=>reading=value});const old=panel.refresh(true);
  globalThis.fetch=async()=>response(payload(175));await panel.refresh(true);
  releaseOld(response(payload(10)));await old;
- assert.equal(reading.aqi,175);assert.equal(JSON.parse($('air-response-json').textContent).current.us_aqi,175);
+ assert.equal(reading.aqi,175);assert.equal($('air-aqi').textContent,'175');
  globalThis.fetch=async()=>response({},503);await panel.refresh(true);
- assert.equal(reading,null);assert.equal($('air-aqi').textContent,'—');assert.equal($('air-mood').textContent,'Waiting for data');
+ assert.equal(reading,null);assert.equal($('air-aqi').textContent,'—');assert.equal($('air-effect').hidden,true);
  assert.equal($('air-status').hidden,false);
- assert.equal($('air-response-state').textContent,'HTTP 503 · unavailable');
- assert(!$('air-response-json').textContent.includes('175'));assert.equal($('air-meter').hidden,true);
+ assert.equal($('air-band').textContent,'Unavailable');
+ assert.equal($('air-effect').textContent,'');assert(!$('air-status').textContent.includes('503'));
 });
 
 test('corrupt storage and storage failures do not stop live data or claim persistence',async t=>{
@@ -137,15 +139,15 @@ test('globe selection opens coordinates with weather and air, and saved points r
  const {$,storage}=setup(t);let reading;
  globalThis.fetch=async url=>response(url.includes('photon')?{features:[]}:url.includes('air-quality')?payload(85):weatherPayload());
  const panel=createAirPanel({onChange:value=>reading=value});
- $('place-tools').open=true;$('api-inspector').open=true;
+ $('place-tools').open=true;
  await panel.selectPoint({latitude:37.1234,longitude:126.4321});
  assert.equal($('air-panel').open,true);assert.equal($('air-title').focused,true);
  assert.equal($('air-title').textContent,'Point conditions');assert($('air-coordinates').textContent.includes('37.12° N'));
  assert.equal(reading.city.kind,'point');assert.equal($('point-weather').hidden,false);
- assert.equal($('air-panel').dataset.mode,'point');assert.equal($('place-tools').open,false);assert.equal($('api-inspector').open,false);
- assert.equal($('point-debug').hidden,false);assert.equal($('point-weather-status').hidden,true);
- assert($('point-weather-received').textContent.startsWith('Received'));
- assert.equal($('point-temperature').textContent,'12.4');assert.equal($('point-rain').textContent,'1.00');assert.equal($('point-weather-state').textContent,'HTTP 200');
+ assert.equal($('air-panel').dataset.mode,'point');assert.equal($('place-tools').open,false);
+ assert.equal($('point-weather-status').hidden,true);
+ assert($('point-weather-time').textContent.startsWith('Model valid '));
+ assert.equal($('point-temperature').textContent,'12.4');assert.equal($('point-rain').textContent,'1.00');
  $('favorite-toggle').events.click();const saved=JSON.parse(storage.get('earth-favorite-cities'))[0];
  assert.equal(saved.kind,'point');assert.equal(saved.latitude,37.1234);
  const restored=createAirPanel({onChange:value=>reading=value});await restored.refresh();assert.equal($('point-weather').hidden,false);assert.equal(reading.city.kind,'point');
@@ -158,7 +160,8 @@ test('weather and air fail independently, and old point responses cannot replace
  assert.equal(reading,null);assert.equal($('point-temperature').textContent,'12.4');assert.equal($('air-band').textContent,'Unavailable');
  globalThis.fetch=async url=>url.includes('photon')?response({features:[]}):url.includes('air-quality')?response(payload(90)):response({},503);
  await panel.refresh(true);assert.equal(reading.aqi,90);assert.equal($('point-temperature').textContent,'—');
- assert($('point-weather-state').textContent.includes('503'));
+ assert($('point-weather-status').textContent.includes('Weather is unavailable'));
+ assert(!$('point-weather-status').textContent.includes('503'));
  assert.equal($('point-weather-status').hidden,false);
  let releaseWeather;
  globalThis.fetch=async url=>url.includes('photon')?response({features:[]}):url.includes('air-quality')?response(payload(100)):new Promise(resolve=>releaseWeather=resolve);
@@ -170,7 +173,7 @@ test('weather and air fail independently, and old point responses cannot replace
  assert.equal(reading.city.latitude,10);assert.equal(reading.aqi,150);assert.equal($('point-temperature').textContent,'22.0');
 });
 
-test('ocean selection shows a sea-level story, survives saving, and clears for land',async t=>{
+test('ocean hides search and save across reloads; land and the Air button restore search',async t=>{
  const {$,storage}=setup(t);let selected;
  globalThis.fetch=async url=>response(url.includes('photon')?{features:[]}:url.includes('air-quality')?payload(50):weatherPayload());
  const options={getSeaLevel:()=>({value:115.8,date:'2026-10',saved:true}),onSelect:place=>selected=place};
@@ -184,13 +187,22 @@ test('ocean selection shows a sea-level story, survives saving, and clears for l
  assert($('ocean-observation').textContent.includes('Oct 2026'));
  assert($('ocean-observation').textContent.includes('saved observation'));
  assert.equal($('point-temperature').textContent,'12.4');
+ assert.equal($('place-tools').hidden,true);assert.equal($('favorite-toggle').hidden,true);
+ assert.equal($('favorites-status').hidden,true);assert.equal($('place-tools').open,false);
  $('favorite-toggle').events.click();
- assert.equal(JSON.parse(storage.get('earth-favorite-cities'))[0].surface,'ocean');
+ assert.equal(storage.get('earth-favorite-cities'),undefined);
  const restored=createAirPanel(options);await restored.refresh();
  assert.equal($('ocean-note').hidden,false);
+ assert.equal($('place-tools').hidden,true);assert.equal($('favorite-toggle').hidden,true);
  await restored.selectPoint({latitude:39.9,longitude:116.4,surface:'land'});
  assert.equal(selected.surface,'land');assert.equal($('ocean-note').hidden,true);
  assert.equal($('air-title').textContent,'Point conditions');
+ assert.equal($('place-tools').hidden,false);assert.equal($('favorite-toggle').hidden,false);
+ await restored.selectPoint({latitude:0,longitude:-140,surface:'ocean'});
+ $('air-open').events.click();await settle();
+ assert.equal($('ocean-note').hidden,true);assert.equal($('place-tools').hidden,false);
+ assert.equal($('place-tools').open,true);assert.equal($('city-query').focused,true);
+ assert.equal(selected.latitude,39.9);
 });
 
 test('point place names arrive independently, preserve exact coordinates and update saved places',async t=>{

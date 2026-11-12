@@ -15,6 +15,7 @@ export function createAirPanel({onChange=()=>{},getSeaLevel=()=>null,onSelect=()
  } catch {}
  try { favoriteCities=parseFavorites(JSON.parse(localStorage.getItem('earth-favorite-cities'))); } catch {}
  try { $('city-query').value=localStorage.getItem('earth-city-query')||''; } catch {}
+ let lastSearchCity=city.surface==='ocean'?DEFAULT_CITY:city;
 
  function store(key,value) {
   try { localStorage.setItem(key,value);return true; } catch { return false; }
@@ -38,6 +39,10 @@ export function createAirPanel({onChange=()=>{},getSeaLevel=()=>null,onSelect=()
   $('air-panel').dataset.mode=city.kind==='point'?'point':'city';
   displayLocation();
   const ocean=city.kind==='point'&&city.surface==='ocean';
+  $('place-tools').hidden=ocean;
+  $('favorite-toggle').hidden=ocean;
+  $('favorites-status').hidden=ocean;
+  if(ocean)$('place-tools').open=false;
   $('air-title').textContent=ocean?'A little ocean story':city.kind==='point'?'Point conditions':'City air';
   $('ocean-note').hidden=!ocean;
   if(ocean){const story=getOceanStory(getSeaLevel());$('ocean-quote').textContent=story.phrases[0];$('ocean-observation').textContent=story.observation;}
@@ -158,6 +163,7 @@ export function createAirPanel({onChange=()=>{},getSeaLevel=()=>null,onSelect=()
   return store('earth-favorite-cities',JSON.stringify(favoriteCities));
  }
  function saveFavoriteCity() {
+  if(city.kind==='point'&&city.surface==='ocean')return;
   if (favoriteCities.some(savedCity=>cityKey(savedCity)===cityKey(city))) { removeFavoriteCity(city);return; }
   if (favoriteCities.length>=FAVORITES_LIMIT) return;
   favoriteCities.push({...city});
@@ -172,6 +178,7 @@ export function createAirPanel({onChange=()=>{},getSeaLevel=()=>null,onSelect=()
  function selectCity(next) {
   searchRequest++;searchController?.abort();
   city=next;store('earth-air-city',JSON.stringify(city));onSelect(city);
+  if(city.surface!=='ocean')lastSearchCity=city;
   $('place-tools').open=false;$('air-body').scrollTop=0;
   if($('air-panel').open)$('air-title').focus();
   $('city-results').replaceChildren();$('city-search-status').textContent='';
@@ -214,7 +221,11 @@ export function createAirPanel({onChange=()=>{},getSeaLevel=()=>null,onSelect=()
  });
  $('city-form').addEventListener('submit',submitCitySearch);
  $('favorite-toggle').addEventListener('click',saveFavoriteCity);
- $('air-open').addEventListener('click',function() { $('air-panel').showModal();$('place-tools').open=true;$('air-body').scrollTop=0;$('city-query').focus(); });
+ $('air-open').addEventListener('click',function() {
+  if(city.surface==='ocean')selectCity(lastSearchCity);
+  if(!$('air-panel').open)$('air-panel').showModal();
+  $('place-tools').open=true;$('air-body').scrollTop=0;$('city-query').focus();
+ });
  $('air-close').addEventListener('click',function() { $('air-panel').close(); });
  $('air-refresh').addEventListener('click',function() { refresh(true); });
  $('air-panel').addEventListener('close',function() { searchRequest++;searchController?.abort(); });
