@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+</head>
+
+<style>
+
+  body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+</style>
+
+<body>
+
+  <button>Press Me</button>
+
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.4/dist/confetti.browser.min.js"></script>
+
+  <script>
+    const button = document.querySelector('button');
+    const size = 2;
+
+    const letterA = confetti.shapeFromText({
+      text: 'A',
+      scalar: size,
+      color: '#0000FF',
+      fontFamily: 'Times New Roman'
+    });
+
+    const letterB = confetti.shapeFromText({
+      text: 'B',
+      scalar: size,
+      color: '#0000FF',
+      fontFamily: 'Arial'
+    });
+
+    const letterC = confetti.shapeFromText({
+      text: 'C',
+      scalar: size,
+      color: '#0000FF',
+      fontFamily: 'Courier New'
+    });
+
+    button.addEventListener('click', function () {
+      confetti({
+        shapes: [letterA, letterB, letterC],
+        scalar: size,
+        ticks: 1000,
+        spread: 360,
+        particleCount: 20,
+      });
+    });
+  </script>
+
+</body>
+</html>
