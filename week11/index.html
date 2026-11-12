@@ -50,7 +50,7 @@
       <details class="source-section"><summary><span>Head shaking</span><span class="source-provider">USGS</span></summary><div class="source-details"><p>The earthquake count in the last hour is compared with the preceding hour. An increase makes the shakes wider, faster and longer; a doubling reaches the strongest stage. Bursts ease in and out.</p><p>This is a separate geological feed. Earthquakes are not presented as a consequence of climate change, and catalogue counts depend on detection and reporting.</p><span id="quake-source-note"></span><a href="https://earthquake.usgs.gov/earthquakes/feed/v1.0/geojson.php" target="_blank" rel="noopener noreferrer">USGS earthquake feed ↗</a></div></details>
       <details class="source-section"><summary><span>Flowing tears</span><span class="source-provider">Open-Meteo</span></summary><div class="source-details"><p>Current precipitation is sampled at 36 locations, including oceans, weighted by latitude-band area and converted to mm/hour. This coarse estimate is not an official measured global mean.</p><p>More rain progresses from watery eyes to continuous streams and sobbing. Stream width, length, speed and opacity increase together.</p><span id="rain-source-note"></span><a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo weather data ↗</a></div></details>
       <details class="source-section"><summary><span>Rising water</span><span class="source-provider">NASA</span></summary><div class="source-details"><p>Global mean sea-level change since 1993 also contributes to tears. This is a long-term observation, not a live tide or wave. The retained observation is +115.8 ±4.0 mm, October 2026.</p><span id="sea-source-note"></span><a href="https://science.nasa.gov/earth/explore/earth-indicators/sea-leve/" target="_blank" rel="noopener noreferrer">NASA sea-level data ↗</a></div></details>
-      <details class="source-section"><summary><span>Heavy eyes</span><span class="source-provider">CAMS / Open-Meteo</span></summary><div class="source-details"><p>Use Air to choose a city. Its current US AQI and PM2.5 model estimates are shown with the city and model time. The eyes grow heavier above AQI 50 and reach their strongest artistic expression at 200.</p><p>This local reading does not replace the global climate observations. Failed or stale data adds no fatigue. Your location preference and up to six saved cities or globe points are kept in this browser. The Air panel shows the returned JSON, HTTP status, received time and the exact condition used to choose its expression.</p><a href="https://open-meteo.com/en/docs/air-quality-api" target="_blank" rel="noopener noreferrer">Open-Meteo / CAMS air data ↗</a></div></details>
+      <details class="source-section"><summary><span>Heavy eyes</span><span class="source-provider">CAMS / Open-Meteo</span></summary><div class="source-details"><p>Use Air to choose a city. Its current US AQI and PM2.5 model estimates are shown with the city and model time. The eyes grow heavier above AQI 50 and reach their strongest artistic expression at 200.</p><p>This local reading does not replace the global climate observations. Failed or stale data adds no fatigue. Your location preference and up to six saved cities or globe points are kept in this browser. The Air panel pairs local readings with a short explanation of Earth’s expression.</p><a href="https://open-meteo.com/en/docs/air-quality-api" target="_blank" rel="noopener noreferrer">Open-Meteo / CAMS air data ↗</a></div></details>
       <p class="data-cadence">Quakes are checked every minute, weather and air every 15 minutes, and climate sources daily. Each source keeps its own observation date. Retained climate values stay dated; missing live feeds stay unavailable.</p>
       <p class="interaction-copy">Drag to rotate · Double-click a point for local data (double-tap on touch) · Click Earth for its voice. Keyboard: arrows to rotate, Home to reset, I to inspect the centre. <a href="https://github.com/mrdoob/three.js" target="_blank" rel="noopener noreferrer">Built with Three.js ↗</a></p>
     </div>
@@ -77,32 +77,18 @@
           <h3 id="ocean-quote" lang="en"></h3><p id="ocean-observation"></p>
         </section>
         <section id="point-weather" class="point-weather" aria-labelledby="point-weather-title" hidden>
-          <div class="air-step-heading"><h3 id="point-weather-title">Weather</h3><span id="point-weather-state" class="request-state">Not requested</span></div>
+          <div class="air-step-heading"><h3 id="point-weather-title">Weather</h3></div>
           <div class="point-readings"><div><strong id="point-temperature">—</strong><span>°C</span></div><div><strong id="point-rain">—</strong><span>mm/h rain</span></div><div><strong id="point-wind">—</strong><span>km/h wind</span></div></div>
           <p id="point-weather-time"></p><p id="point-weather-status" role="status" hidden></p>
         </section>
         <section class="air-response" aria-label="Air quality">
-          <div class="air-step-heading"><span class="air-step">Air quality</span><span id="air-response-state" class="request-state">Not requested</span></div>
+          <div class="air-step-heading"><span class="air-step">Air quality</span></div>
           <div class="air-readings"><div><strong id="air-aqi">—</strong><span>US AQI</span></div><div><strong id="air-pm25">—</strong><span>PM2.5 · μg/m³</span></div></div>
-          <div class="air-result"><p id="air-band"></p><span id="air-mood"></span></div>
+          <div class="air-result"><p id="air-band"></p></div><p id="air-effect" hidden></p>
           <p id="air-time"></p><p id="air-status" role="status" hidden></p>
         </section>
-        <div class="air-links"><span>Open-Meteo / CAMS · model data</span><button id="air-refresh" type="button">Refresh ↻</button></div>
-        <details id="api-inspector" class="api-details">
-          <summary>API data &amp; expression</summary>
-          <div id="point-debug" hidden>
-            <h3>Weather response</h3><p id="air-selection-source" hidden>Picked on Earth · nearest model grid</p><p id="point-weather-received"></p>
-            <a id="point-weather-request" href="https://open-meteo.com/en/docs" target="_blank" rel="noopener noreferrer">Weather request ↗</a><pre tabindex="0" aria-label="Weather API response JSON"><code id="point-weather-json">No response yet.</code></pre>
-          </div>
-          <h3>Air response</h3>
-          <dl class="api-facts"><div><dt>Request status</dt><dd id="air-http-status">Not requested</dd></div><div><dt>Received</dt><dd id="air-received">—</dd></div></dl>
-          <a id="air-request-url" href="https://open-meteo.com/en/docs/air-quality-api" target="_blank" rel="noopener noreferrer">Air request ↗</a>
-          <pre tabindex="0" aria-label="JSON returned by the air-quality API"><code id="air-response-json">No API response yet.</code></pre>
-          <div class="air-translation"><div class="air-mood-heading"><strong>Eye fatigue</strong><span id="air-strength">—</span></div><meter id="air-meter" min="0" max="1" value="0" aria-label="Artistic air-related fatigue strength" hidden></meter><p id="air-rule">No fresh AQI is available.</p><p id="air-effect">No air-related fatigue is added.</p></div>
-          <p>Fatigue = clamp((AQI − 50) / 150, 0, 1). Local readings do not replace global climate data. Checked every 15 minutes; received time and model time differ.</p>
-          <p><a href="https://open-meteo.com/en/docs/air-quality-api" target="_blank" rel="noopener noreferrer">Air source ↗</a> · <a href="https://open-meteo.com/en/docs" target="_blank" rel="noopener noreferrer">Weather source ↗</a> · <a href="https://open-meteo.com/en/docs/geocoding-api" target="_blank" rel="noopener noreferrer">City search ↗</a></p>
-          <p>Nearby place names: <a href="https://photon.komoot.io/" target="_blank" rel="noopener noreferrer">Photon</a> / © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>. Names describe a nearby mapped place; the coordinates remain the exact point you selected.</p>
-        </details>
+        <div class="air-links"><span>Data: <a href="https://open-meteo.com/en/docs" target="_blank" rel="noopener noreferrer">Open-Meteo</a> / <a href="https://open-meteo.com/en/docs/air-quality-api" target="_blank" rel="noopener noreferrer">CAMS</a></span><button id="air-refresh" type="button">Refresh ↻</button></div>
+        <p class="location-credit">Places: <a href="https://photon.komoot.io/" target="_blank" rel="noopener noreferrer">Photon</a> / © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> · Nearby place names; weather and air are local model estimates.</p>
       </div>
     </div>
   </dialog>

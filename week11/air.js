@@ -1,6 +1,6 @@
-import {DEFAULT_CITY,parseCity,airUrl,airBand,getAirMood,cityKey,parseFavorites,FAVORITES_LIMIT,searchCities,fetchAirQuality} from './air-data.js';
+import {DEFAULT_CITY,parseCity,airBand,getAirMood,cityKey,parseFavorites,FAVORITES_LIMIT,searchCities,fetchAirQuality} from './air-data.js';
 export * from './air-data.js';
-import {fetchPointWeather,pointWeatherUrl,formatCoordinates} from './point-data.js';
+import {fetchPointWeather,formatCoordinates} from './point-data.js';
 import {getOceanStory} from './surface.js';
 import {fetchPointLocation,formatPlaceLabel} from './location-data.js';
 
@@ -30,29 +30,9 @@ export function createAirPanel({onChange=()=>{},getSeaLevel=()=>null,onSelect=()
   $('air-coordinates').textContent=formatCoordinates(city);
  }
  function updateExpression(reading) {
-  const mood=getAirMood(reading?.aqi);
-  $('air-mood').textContent=mood.label;
-  $('air-rule').textContent=mood.condition;
-  $('air-effect').textContent=mood.effect;
-  $('air-strength').textContent=reading ? `${Math.round(mood.intensity*100)}% fatigue` : '—';
-  $('air-meter').hidden=!reading;
-  $('air-meter').value=mood.intensity;
-  $('air-meter').textContent=reading ? `${Math.round(mood.intensity*100)}%` : '';
- }
- function resetResponse() {
-  $('air-response-state').textContent='Requesting…';
-  $('air-response-state').dataset.state='loading';
-  $('air-http-status').textContent='Pending';
-  $('air-received').textContent='—';
-  $('air-response-json').textContent='Waiting for an API response.';
-  $('air-request-url').href=airUrl(city);
- }
- function showResponse(response) {
-  $('air-http-status').textContent=`HTTP ${response.status}`;
-  $('air-received').textContent=formatTime(response.receivedAt);
-  $('air-response-json').textContent=JSON.stringify(response.payload,null,2);
-  $('air-response-state').textContent=`HTTP ${response.status}`;
-  $('air-response-state').dataset.state='success';
+  // The sentence and the rendered eyes share getAirMood's AQI conditions.
+  $('air-effect').textContent=reading?getAirMood(reading.aqi).effect:'';
+  $('air-effect').hidden=!reading;
  }
  function clearReading() {
   $('air-panel').dataset.mode=city.kind==='point'?'point':'city';
@@ -61,9 +41,8 @@ export function createAirPanel({onChange=()=>{},getSeaLevel=()=>null,onSelect=()
   $('air-title').textContent=ocean?'A little ocean story':city.kind==='point'?'Point conditions':'City air';
   $('ocean-note').hidden=!ocean;
   if(ocean){const story=getOceanStory(getSeaLevel());$('ocean-quote').textContent=story.phrases[0];$('ocean-observation').textContent=story.observation;}
-  $('air-selection-source').hidden=city.kind!=='point';
   $('air-aqi').textContent='—';$('air-pm25').textContent='—';
-  $('air-band').textContent='Waiting';$('air-time').textContent='';
+  $('air-band').textContent='Loading…';$('air-time').textContent='';
   $('air-open').textContent='Air';$('air-open').style.removeProperty('--air-colour');
   $('air-band').style.removeProperty('--band-colour');
   $('air-open').setAttribute('aria-label',`Search city air quality. Selected city: ${city.name}.`);
@@ -79,18 +58,13 @@ export function createAirPanel({onChange=()=>{},getSeaLevel=()=>null,onSelect=()
   $('air-open').setAttribute('aria-label',`${city.name}: AQI ${Math.round(reading.aqi)}. Search another city's air quality.`);
   $('air-time').textContent=`Model valid ${formatTime(reading.time)}`;
   $('air-status').textContent='';$('air-status').hidden=true;
-  showResponse(response);updateExpression(reading);updateEarthFace(reading);
+  updateExpression(reading);updateEarthFace(reading);
  }
  function resetPointWeather() {
   $('point-weather').hidden=city.kind!=='point';
-  $('point-debug').hidden=city.kind!=='point';
   for(const id of ['point-temperature','point-rain','point-wind'])$(id).textContent='—';
   $('point-weather-time').textContent='';
-  $('point-weather-state').textContent='Requesting…';$('point-weather-state').dataset.state='loading';
   $('point-weather-status').textContent='';$('point-weather-status').hidden=true;
-  $('point-weather-received').textContent='';
-  $('point-weather-json').textContent='Waiting for a weather response.';
-  $('point-weather-request').href=pointWeatherUrl(city);
  }
  async function loadAirReading(active,current) {
   try {
@@ -99,15 +73,9 @@ export function createAirPanel({onChange=()=>{},getSeaLevel=()=>null,onSelect=()
    displayAirReading(response);
   } catch(error) {
    if(current!==request)return;
-   if(error.payload)showResponse(error);
-   $('air-response-state').textContent=error.status?`HTTP ${error.status} · unavailable`:active.signal.aborted?'Request timed out':'Network unavailable';
-   $('air-response-state').dataset.state='error';
-   $('air-http-status').textContent=error.status?`HTTP ${error.status}${error.invalidData?' · invalid or stale data':''}`:'No response received';
-   if(error.receivedAt)$('air-received').textContent=formatTime(error.receivedAt);
-   if(!error.payload)$('air-response-json').textContent='No usable JSON response is available.';
    $('air-band').textContent='Unavailable';
    $('air-status').hidden=false;
-   $('air-status').textContent=error.invalidData?'The response is missing valid, recent readings. No air-related fatigue is added.':'The air-quality API could not be reached. Retry or choose another location.';
+   $('air-status').textContent=error.invalidData?'Fresh air data isn’t available right now.':'Air data is unavailable. Try Refresh or choose another place.';
   }
  }
  async function loadPointWeather(active,current) {
@@ -116,17 +84,11 @@ export function createAirPanel({onChange=()=>{},getSeaLevel=()=>null,onSelect=()
    $('point-temperature').textContent=response.reading.temperature.toFixed(1);
    $('point-rain').textContent=response.reading.rain.toFixed(2);
    $('point-wind').textContent=response.reading.wind.toFixed(1);
-   $('point-weather-state').textContent=`HTTP ${response.status}`;$('point-weather-state').dataset.state='success';
    $('point-weather-time').textContent=`Model valid ${formatTime(response.reading.time)}`;
-   $('point-weather-received').textContent=`Received ${formatTime(response.receivedAt)}`;
-   $('point-weather-json').textContent=JSON.stringify(response.payload,null,2);
   } catch(error) {
    if(current!==request)return;
-   $('point-weather-state').textContent=error.status?`HTTP ${error.status} · unavailable`:'Weather unavailable';
-   $('point-weather-state').dataset.state='error';
    $('point-weather-status').hidden=false;
-   $('point-weather-status').textContent='No valid, recent weather is available for this point. Air quality is checked separately.';
-   $('point-weather-json').textContent=error.payload?JSON.stringify(error.payload,null,2):'No usable weather response is available.';
+   $('point-weather-status').textContent='Weather is unavailable for this point. Try Refresh.';
   }
  }
  async function loadPointName(active,current) {
@@ -159,7 +121,7 @@ export function createAirPanel({onChange=()=>{},getSeaLevel=()=>null,onSelect=()
   if(!force&&Date.now()-checked<900000)return;
   checked=Date.now();controller?.abort();controller=new AbortController();
   const active=controller,current=++request;
-  clearReading();resetResponse();resetPointWeather();
+  clearReading();resetPointWeather();
   $('air-status').textContent='';$('air-status').hidden=true;$('air-refresh').disabled=true;
   const timeout=setTimeout(()=>active.abort(),12000);
   try {
@@ -210,7 +172,7 @@ export function createAirPanel({onChange=()=>{},getSeaLevel=()=>null,onSelect=()
  function selectCity(next) {
   searchRequest++;searchController?.abort();
   city=next;store('earth-air-city',JSON.stringify(city));onSelect(city);
-  $('place-tools').open=false;$('api-inspector').open=false;$('air-body').scrollTop=0;
+  $('place-tools').open=false;$('air-body').scrollTop=0;
   if($('air-panel').open)$('air-title').focus();
   $('city-results').replaceChildren();$('city-search-status').textContent='';
   $('favorites-status').textContent='';renderFavoriteCities();
@@ -257,6 +219,5 @@ export function createAirPanel({onChange=()=>{},getSeaLevel=()=>null,onSelect=()
  $('air-refresh').addEventListener('click',function() { refresh(true); });
  $('air-panel').addEventListener('close',function() { searchRequest++;searchController?.abort(); });
  clearReading();resetPointWeather();renderFavoriteCities();
- $('air-response-state').textContent='Not requested';
  return {refresh,selectPoint};
 }

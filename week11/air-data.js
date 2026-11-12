@@ -38,10 +38,10 @@ export function getAirMood(aqi) {
   return {label:'Waiting for data',stage:0,intensity:0,condition:'No fresh AQI is available.',effect:'No air-related fatigue is added.'};
  }
  const intensity=Math.max(0,Math.min(1,(aqi-50)/150));
- if (aqi<=50) return {label:'Comfortable',stage:0,intensity,condition:'AQI ≤ 50',effect:'The air reading adds no eye droop.'};
- if (aqi<=100) return {label:'A little tired',stage:0,intensity,condition:'50 < AQI ≤ 100',effect:'The eyes begin to grow heavier.'};
- if (aqi<=150) return {label:'Tired',stage:1,intensity,condition:'100 < AQI ≤ 150',effect:'The eyes droop more and the eyebrows tilt.'};
- return {label:'Very tired',stage:2,intensity,condition:'AQI > 150',effect:'The eyes grow heavier, reaching maximum fatigue at AQI 200.'};
+ if (aqi<=50) return {label:'Comfortable',stage:0,intensity,condition:'AQI ≤ 50',effect:'Clearer air gives my eyes a little rest.'};
+ if (aqi<=100) return {label:'A little tired',stage:0,intensity,condition:'50 < AQI ≤ 100',effect:'The air feels heavy, and so do my eyes.'};
+ if (aqi<=150) return {label:'Tired',stage:1,intensity,condition:'100 < AQI ≤ 150',effect:'This air is making my eyes droop.'};
+ return {label:'Very tired',stage:2,intensity,condition:'AQI > 150',effect:'This air is wearing me out. My eyes feel so heavy.'};
 }
 
 export const FAVORITES_LIMIT=6;
